@@ -1,0 +1,7 @@
+# Copie para terraform.tfvars (que não vai para o Git) e ajuste.
+regiao_primaria    = "sa-east-1"
+regioes_replica    = ["us-east-1", "eu-west-1"]
+tabela             = "Estoque"
+tabela_throttle    = "EstoqueThrottle"
+email_alerta_custo = ""
+limite_custo_usd   = 10
