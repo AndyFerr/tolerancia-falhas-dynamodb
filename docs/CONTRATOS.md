@@ -2,58 +2,75 @@
 
 > Entregável da linha **A7**. Uma vez aprovado, este documento está **congelado**: mudar qualquer campo aqui exige acordo dos 3 integrantes, porque backend, scripts de cenário e dashboard são escritos em paralelo contra este texto.
 >
-> Modelo de domínio: **estoque de produtos**. Cada cenário provoca uma falha e mede a consequência em unidades de estoque — não em contagem de registros.
+> Versão 3 — alinhada ao código já existente em `lab/` e `terraform/` (branch `feat/infra-base`). Os nomes de campo seguem o código; o que mudou foi o documento.
 
 ## Regras gerais
 
-1. **Unidade no nome do campo.** Toda medida de tempo termina em `_ms` ou `_s`. Nunca existe um campo `duracao` sem sufixo.
-2. **Timestamps em ISO 8601 UTC** com `Z` no fim: `2026-11-20T14:30:12.483Z`.
-3. **Nomes em snake_case**, sem acento. Rótulos com acento só em campos de exibição (`rotulo`).
-4. **Todo campo declarado aqui sempre existe.** Se não há valor, vai `null` — nunca omitido.
+1. **Unidade no nome do campo.** Toda medida de tempo termina em `_ms` ou `_s`.
+2. **Timestamps em ISO 8601 UTC** com milissegundos e `Z`: `2026-11-20T14:30:12.483Z` (formato produzido por `lab/tempo.iso()`).
+3. **Nomes em snake_case**, sem acento.
+4. **Todo campo declarado aqui sempre existe.** Sem valor, vai `null` — nunca omitido.
 5. **Região sempre pelo código da AWS** (`sa-east-1`), nunca pelo nome da cidade.
-6. **Estoque nunca é recalculado pelo dashboard.** O número exibido é o que o script mediu; a tela não faz aritmética sobre dados de cenário.
+6. **Números monetários e decimais usam `Decimal`**, nunca `float` — o boto3 recusa `float` ao gravar no DynamoDB.
 
 ---
 
-## 1. O item na tabela `Estoque`
+## 1. As duas tabelas
 
-Não aparece individualmente no dashboard. É a matéria-prima que os cenários decrementam.
+O projeto usa **duas** tabelas, com papéis distintos.
+
+| Tabela | Regiões | Cobrança | Usada por |
+|---|---|---|---|
+| `Estoque` | `sa-east-1` (primária), réplicas em `us-east-1` e `eu-west-1` | sob demanda | Cenários A, C e D |
+| `EstoqueThrottle` | só `sa-east-1` | provisionada, 1 WCU / 1 RCU | Cenário B |
+
+A separação é deliberada: fixar 1 WCU na tabela global estrangularia também a replicação e inviabilizaria os Cenários A, C e D. Com a tabela dedicada, o throttling é provocado sem efeito colateral e sem esperar mudança de capacidade.
+
+**Consequência para o Cenário B:** a capacidade é configuração fixa da tabela, não algo que o cenário manipula. Não existem etapas de reduzir e restaurar capacidade.
+
+### O item
+
+Mesmo formato nas duas tabelas.
 
 ```json
 {
-  "produto_id": "SKU-0042",
-  "nome": "Fone bluetooth",
-  "preco": 129.90,
-  "estoque": 100,
-  "versao": 7,
-  "regiao_ultima_escrita": "sa-east-1",
-  "atualizado_em": "2026-11-20T14:30:12.483Z"
+  "produto_id": "prod-042",
+  "nome": "Produto 042",
+  "quantidade": 100,
+  "preco": 115.00,
+  "versao": 1,
+  "atualizado_em": "2026-11-20T14:30:12.483Z",
+  "regiao_escrita": "sa-east-1",
+  "escritor": "cenario_c"
 }
 ```
 
 | Campo | Tipo | Observação |
 |---|---|---|
-| `produto_id` | string | chave de partição — formato `SKU-NNNN` |
-| `nome` | string | valor sintético do seed |
-| `preco` | number | duas casas decimais |
-| `estoque` | number | unidades disponíveis — **é o campo que os cenários movem** |
-| `versao` | number | contador incrementado a cada escrita; alvo do `ConditionExpression` no Cenário C |
-| `regiao_ultima_escrita` | string | qual região gravou por último — evidência de quem venceu o conflito |
-| `atualizado_em` | string | carimbo **da aplicação**; não é o que o DynamoDB usa para desempatar |
+| `produto_id` | string | chave de partição — formato `prod-NNN`, gerado por `config.id_produto(n)` |
+| `nome` | string | `Produto NNN` |
+| `quantidade` | number | unidades disponíveis — **é o campo que os cenários movem** |
+| `preco` | Decimal | preço unitário; base das métricas de valor do Cenário D |
+| `versao` | number | incrementa a cada escrita; começa em **1** no seed; alvo do `ConditionExpression` no Cenário C |
+| `atualizado_em` | string | carimbo **da aplicação**; não é o que o DynamoDB usa para desempatar conflito |
+| `regiao_escrita` | string | região que gravou — evidência de quem venceu o conflito |
+| `escritor` | string | processo que gravou: `seed`, `reset`, `cenario_a`…`cenario_d` |
 
-**Seed (linha B4):** 50 produtos, `estoque` inicial 100 em cada, `versao` 0.
+**Seed (linha B4):** 50 produtos (`prod-001` a `prod-050`), `quantidade` 100, `versao` 1, na tabela `Estoque`. Na `EstoqueThrottle` entra **apenas o produto usado pelo Cenário B** — gravar 50 itens a 1 WCU levaria perto de um minuto só de throttling no próprio seed.
 
-> **Consequência importante do modelo.** Como os cenários **decrementam** em vez de criar itens, a contagem de registros não muda nunca. O que converge entre regiões é o **valor** do campo `estoque`. Por isso os cards do dashboard mostram total de unidades, não número de itens.
+**`preco` é determinístico**, função de `n`, para que o valor total do estoque seja reproduzível entre execuções e sirva de checksum.
+
+> **Consequência do modelo.** Os cenários **decrementam** em vez de criar itens, então a contagem de registros nunca muda. O que converge entre regiões é o valor de `quantidade`. Por isso os cards do dashboard mostram unidades, não número de itens.
 
 ---
 
 ## 2. O arquivo de resultado (`results/cenario_X_*.json`)
 
-Todos os quatro cenários usam o **mesmo envelope**. Só `parametros` e `metricas` mudam.
+Todos os cenários usam o **mesmo envelope**. Só `parametros` e `metricas` mudam.
 
 ```json
 {
-  "schema_version": "2.0",
+  "schema_version": "3.0",
   "cenario": "A",
   "execucao_id": "a-2026-11-20T143000Z",
   "inicio": "2026-11-20T14:30:00.000Z",
@@ -66,24 +83,24 @@ Todos os quatro cenários usam o **mesmo envelope**. Só `parametros` e `metrica
 }
 ```
 
-| Campo | Tipo | Valores |
-|---|---|---|
-| `schema_version` | string | `"2.0"` — versão do modelo de estoque |
-| `cenario` | string | `A`, `B`, `C` ou `D` |
-| `execucao_id` | string | `<cenario minúsculo>-<timestamp compacto>` — também é o nome do arquivo |
-| `status` | string | `concluido`, `erro`, `em_andamento` |
-| `erro` | object \| null | preenchido só quando `status` = `erro` (ver seção 4) |
+| Campo | Valores |
+|---|---|
+| `schema_version` | `"3.0"` |
+| `cenario` | `A`, `B`, `C` ou `D` |
+| `execucao_id` | `<cenario minúsculo>-<timestamp compacto>` — também é o nome do arquivo |
+| `status` | `concluido`, `erro`, `em_andamento` |
+| `erro` | objeto da seção 4, ou `null` |
 
 ### Cenário A — falha de região
 
-Vende durante a queda de uma réplica e mede quando o estoque converge.
+**Provoca a falha removendo a réplica** via `UpdateTable`. É a única forma usada: apontar o cliente para um endpoint inválido não remove a cópia dos dados, a replicação continua normal e não existe convergência para medir.
 
 ```json
 "parametros": {
+  "tabela": "Estoque",
   "regiao_removida": "us-east-1",
   "regiao_venda": "sa-east-1",
-  "n_vendas": 100,
-  "produtos_envolvidos": 50
+  "n_vendas": 100
 },
 "metricas": {
   "vendas_aceitas": 100,
@@ -99,15 +116,16 @@ Vende durante a queda de uma réplica e mede quando o estoque converge.
 }
 ```
 
-`tempo_convergencia_ms` é medido do momento em que a réplica volta a `ACTIVE` até `unidades_por_regiao` ficar igual nas três.
+`tempo_convergencia_ms` é medido de quando a réplica volta a `ACTIVE` até `unidades_por_regiao` ficar igual nas três.
 
 ### Cenário B — throttling em produto quente
 
-Promoção relâmpago em **um único produto** — que é exatamente o caso que a §4.4 diz não se resolver com split de partição.
+Roda contra `EstoqueThrottle`, que já está em 1 WCU. Duas fases sobre o mesmo produto.
 
 ```json
 "parametros": {
-  "produto_id": "SKU-0007",
+  "tabela": "EstoqueThrottle",
+  "produto_id": "prod-007",
   "write_capacity_units": 1,
   "n_vendas": 100
 },
@@ -129,16 +147,21 @@ Promoção relâmpago em **um único produto** — que é exatamente o caso que 
 }
 ```
 
-`vendas_perdidas` é a leitura de negócio do throttling: não é um erro abstrato, é venda que não aconteceu.
+`write_capacity_units` é registrado como **contexto**, não como algo que o cenário alterou.
+
+O cliente precisa desligar o retry do SDK para medir o próprio backoff — `aws.cliente(regiao, tentativas=1)`.
+
+`vendas_perdidas` é a leitura de negócio do throttling: não é erro abstrato, é venda que não aconteceu.
 
 ### Cenário C — conflito last-writer-wins e sobrevenda
 
-O cenário central do modelo de estoque. Duas regiões vendem o mesmo produto ao mesmo tempo. Três modos, mesma estrutura de métricas, para isolar o que a escrita condicional resolve e o que ela não resolve.
+Duas regiões vendem o mesmo produto ao mesmo tempo. Três modos, mesma estrutura de métricas.
 
 ```json
 "parametros": {
-  "produto_id": "SKU-0042",
-  "estoque_inicial": 100,
+  "tabela": "Estoque",
+  "produto_id": "prod-042",
+  "quantidade_inicial": 100,
   "vendas_por_regiao": 50,
   "regioes": ["sa-east-1", "eu-west-1"],
   "rodadas": 5
@@ -147,8 +170,8 @@ O cenário central do modelo de estoque. Duas regiões vendem o mesmo produto ao
   "modos": {
     "sem_condicao": {
       "vendas_confirmadas": 100,
-      "estoque_esperado": 0,
-      "estoque_final": 63,
+      "quantidade_esperada": 0,
+      "quantidade_final": 63,
       "sobrevendas": 63,
       "conflitos_detectados": 0,
       "convergencia_p50_ms": 1240,
@@ -156,8 +179,8 @@ O cenário central do modelo de estoque. Duas regiões vendem o mesmo produto ao
     },
     "com_condicao_multi_regiao": {
       "vendas_confirmadas": 98,
-      "estoque_esperado": 2,
-      "estoque_final": 41,
+      "quantidade_esperada": 2,
+      "quantidade_final": 41,
       "sobrevendas": 39,
       "conflitos_detectados": 2,
       "convergencia_p50_ms": 1310,
@@ -165,8 +188,8 @@ O cenário central do modelo de estoque. Duas regiões vendem o mesmo produto ao
     },
     "com_condicao_regiao_unica": {
       "vendas_confirmadas": 100,
-      "estoque_esperado": 0,
-      "estoque_final": 0,
+      "quantidade_esperada": 0,
+      "quantidade_final": 0,
       "sobrevendas": 0,
       "conflitos_detectados": 37,
       "convergencia_p50_ms": null,
@@ -179,20 +202,21 @@ O cenário central do modelo de estoque. Duas regiões vendem o mesmo produto ao
 | Campo | Significado |
 |---|---|
 | `vendas_confirmadas` | quantas vendas a aplicação **disse ao cliente** que deram certo |
-| `estoque_esperado` | `estoque_inicial − vendas_confirmadas` |
-| `estoque_final` | o que a tabela realmente mostra depois da convergência |
-| `sobrevendas` | `estoque_final − estoque_esperado` — unidades vendidas que nunca saíram da prateleira |
+| `quantidade_esperada` | `quantidade_inicial − vendas_confirmadas` |
+| `quantidade_final` | o que a tabela mostra depois da convergência |
+| `sobrevendas` | `quantidade_final − quantidade_esperada` — unidades vendidas que nunca saíram da prateleira |
 | `conflitos_detectados` | `ConditionalCheckFailedException` capturadas |
 
-O modo `com_condicao_regiao_unica` é o controle: ele deve zerar as sobrevendas. Os dois primeiros modos não devem zerar — e é essa diferença que é o achado do cenário.
+O modo `com_condicao_regiao_unica` é o **controle**: ele deve zerar as sobrevendas. Os outros dois não devem — e é essa diferença que é o achado.
+
+Os números acima são **formato, não previsão**. A hipótese fica em `docs/cenarios/C.md`.
 
 ### Cenário D — recuperação via PITR
 
-Atualização em massa que zera o estoque por engano, restaurada por point-in-time.
-
 ```json
 "parametros": {
-  "tipo_corrupcao": "estoque_zerado_em_massa",
+  "tabela": "Estoque",
+  "tipo_corrupcao": "quantidade_zerada_em_massa",
   "produtos_afetados": 40,
   "instante_restauracao": "2026-11-20T14:20:00.000Z",
   "tabela_restaurada": "Estoque_restore_20261120T1430"
@@ -205,6 +229,7 @@ Atualização em massa que zera o estoque por engano, restaurada por point-in-ti
   "valor_apos_corrupcao": 12990.00,
   "produtos_restaurados": 50,
   "unidades_restauradas": 5000,
+  "valor_restaurado": 64950.00,
   "divergencias": 0,
   "checksum_antes": "a3f1c0d9",
   "checksum_depois": "a3f1c0d9",
@@ -212,7 +237,9 @@ Atualização em massa que zera o estoque por engano, restaurada por point-in-ti
 }
 ```
 
-`valor_*` é a soma de `preco × estoque` — um checksum de negócio, legível para quem não é técnico.
+`valor_*` é a soma de `preco × quantidade` — um checksum de negócio, legível para quem não é técnico. É o motivo de `preco` existir no item.
+
+Como em todos os exemplos deste documento, os números acima são **formato, não previsão**: o valor real decorre da função `config.preco(n)` e da quantidade corrente.
 
 ---
 
@@ -222,16 +249,16 @@ Base: `http://localhost:8080`
 
 ### `GET /status`
 
-Consultado pelo dashboard a cada poucos segundos. É o que pinta os cards.
+Consultado pelo dashboard a cada poucos segundos. Reporta a tabela `Estoque`; a `EstoqueThrottle` não aparece nos cards.
 
 ```json
 {
   "tabela": "Estoque",
   "consultado_em": "2026-11-20T14:28:03.221Z",
   "regioes": [
-    { "regiao": "sa-east-1", "rotulo": "São Paulo", "estado": "ACTIVE", "produtos": 50, "unidades": 5000 },
-    { "regiao": "us-east-1", "rotulo": "Virgínia",  "estado": "ACTIVE", "produtos": 50, "unidades": 5000 },
-    { "regiao": "eu-west-1", "rotulo": "Irlanda",   "estado": "ACTIVE", "produtos": 50, "unidades": 5000 }
+    { "regiao": "sa-east-1", "rotulo": "São Paulo", "estado": "ACTIVE", "itens": 50, "unidades": 5000 },
+    { "regiao": "us-east-1", "rotulo": "Virgínia",  "estado": "ACTIVE", "itens": 50, "unidades": 5000 },
+    { "regiao": "eu-west-1", "rotulo": "Irlanda",   "estado": "ACTIVE", "itens": 50, "unidades": 5000 }
   ],
   "execucao_em_andamento": null
 }
@@ -239,24 +266,19 @@ Consultado pelo dashboard a cada poucos segundos. É o que pinta os cards.
 
 `estado` repassa o valor da AWS: `ACTIVE`, `CREATING`, `UPDATING`, `DELETING`, ou `AUSENTE` quando a réplica não existe.
 
-`produtos` e `unidades` vêm de um `Scan` por região somando o campo `estoque` — **não** do `ItemCount` do `DescribeTable`, que é aproximado, só atualiza a cada ~6 horas e, neste modelo, nem mudaria (o número de itens é constante). Com 50 produtos o `Scan` é instantâneo.
+`itens` e `unidades` vêm de `lab.aws.resumo_regiao()` — um `Scan` paginado projetando só `quantidade`. **Não** usar o `ItemCount` do `DescribeTable`: é aproximado, atualiza a cada ~6 horas e, neste modelo, nem mudaria.
 
 ### `POST /cenario/{a|b|c|d}`
 
-Dispara o cenário em segundo plano e responde **imediatamente** com `202`. Cenários levam minutos; segurar a conexão estouraria o timeout do navegador. Sem corpo na requisição — os parâmetros são fixos no script.
+Dispara em segundo plano e responde **imediatamente** com `202`. Sem corpo na requisição — os parâmetros são fixos no script.
 
 ```json
-{
-  "execucao_id": "a-2026-11-20T143000Z",
-  "status": "em_andamento"
-}
+{ "execucao_id": "a-2026-11-20T143000Z", "status": "em_andamento" }
 ```
 
-Se já houver execução em andamento, responde `409` com o corpo de erro da seção 4.
+Com execução em andamento, responde `409`.
 
 ### `GET /execucao/{execucao_id}`
-
-O dashboard consulta em intervalo regular até `status` sair de `em_andamento`.
 
 ```json
 {
@@ -267,18 +289,18 @@ O dashboard consulta em intervalo regular até `status` sair de `em_andamento`.
 }
 ```
 
-Ao terminar, devolve **o envelope completo da seção 2** — o mesmo conteúdo gravado em `results/`.
+Ao terminar, devolve o envelope completo da seção 2.
 
 | Cenário | Etapas |
 |---|---|
 | A | `removendo_replica`, `vendendo_durante_queda`, `recriando_replica`, `medindo_convergencia` |
-| B | `reduzindo_capacidade`, `fase_sem_retry`, `fase_com_backoff`, `restaurando_capacidade` |
+| B | `fase_sem_retry`, `fase_com_backoff` |
 | C | `modo_sem_condicao`, `modo_com_condicao_multi_regiao`, `modo_com_condicao_regiao_unica`, `aguardando_convergencia` |
-| D | `corrompendo_estoque`, `restaurando_pitr`, `comparando_itens` |
+| D | `corrompendo_quantidade`, `restaurando_pitr`, `comparando_itens` |
 
 ### `GET /resultados`
 
-Lista as execuções já gravadas em `results/`. Alimenta o **modo replay**.
+Lista as execuções gravadas em `results/`. Alimenta o modo replay.
 
 ```json
 {
@@ -290,17 +312,17 @@ Lista as execuções já gravadas em `results/`. Alimenta o **modo replay**.
 
 ### `POST /reset`
 
-Repõe o estoque de todos os produtos para 100 e zera `versao`. Necessário entre execuções — sem isso, a segunda rodada do Cenário C começa com estoque já consumido.
+Chama o equivalente de `scripts/03_reset.py`: regrava os 50 produtos com 100 unidades e `versao` 1 nas duas tabelas, e remove itens que não pertençam ao conjunto.
 
 ```json
-{ "produtos_resetados": 50, "unidades": 5000 }
+{ "produtos_resetados": 50, "unidades": 5000, "sobras_removidas": 0 }
 ```
+
+Necessário entre execuções: sem isso, a rodada seguinte começa com estoque já consumido e os números perdem sentido.
 
 ---
 
 ## 4. Erros
-
-Mesmo formato em qualquer endpoint. O dashboard nunca mostra stack trace.
 
 ```json
 {
@@ -321,7 +343,7 @@ Mesmo formato em qualquer endpoint. O dashboard nunca mostra stack trace.
 | `FALHA_AWS` | 502 | erro devolvido pela AWS no meio do cenário |
 | `TABELA_INDISPONIVEL` | 503 | tabela não está `ACTIVE` nas regiões necessárias |
 
-Quando um cenário falha no meio, o arquivo em `results/` **é gravado mesmo assim**, com `status: "erro"` e a `etapa` em que parou. Execução que falhou também é evidência.
+Cenário que falha no meio **grava o arquivo mesmo assim**, com `status: "erro"` e a `etapa` em que parou. Execução que falhou também é evidência.
 
 ---
 
@@ -331,5 +353,5 @@ Quando um cenário falha no meio, o arquivo em `results/` **é gravado mesmo ass
 |---|---|---|
 | Este contrato | `docs/CONTRATOS.md` | sim |
 | Exemplos executáveis (mocks de B5/B6) | `scenarios/fixtures/*.json` | sim |
-| Resultados reais das execuções | `results/*.json` | sim — é a evidência do trabalho |
+| Resultados reais | `results/*.json` | sim — é a evidência do trabalho |
 | Schema de validação (opcional) | `docs/schemas/resultado.schema.json` | sim |
