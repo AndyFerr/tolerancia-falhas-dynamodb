@@ -1,0 +1,188 @@
+# Tolerância a Falhas com Amazon DynamoDB
+
+[![Amazon DynamoDB](https://img.shields.io/badge/Amazon-DynamoDB-4053D6?style=for-the-badge&logo=amazondynamodb&logoColor=white)](https://aws.amazon.com/dynamodb/)
+[![USENIX ATC 2022](https://img.shields.io/badge/Paper-USENIX%20ATC%20'22-8B0000?style=for-the-badge)](#10-referência)
+[![Status](https://img.shields.io/badge/Status-Em%20andamento-yellow?style=for-the-badge)](#7-status-e-próximos-passos)
+[![UFAL](https://img.shields.io/badge/UFAL-Ciência%20da%20Computação-red?style=for-the-badge)](https://ic.ufal.br/)
+
+Trabalho acadêmico da disciplina de **Sistemas Distribuídos**, no curso de **Bacharelado em Ciência da Computação** do **Instituto de Computação (IC)** da **Universidade Federal de Alagoas (UFAL)**.
+
+**Professor:** Leandro Sales
+
+---
+
+## Sumário
+
+- [1. Sobre o Trabalho](#1-sobre-o-trabalho)
+- [2. Paper Base](#2-paper-base)
+- [3. Arquitetura do DynamoDB em Resumo](#3-arquitetura-do-dynamodb-em-resumo)
+- [4. Mecanismos de Tolerância a Falhas](#4-mecanismos-de-tolerância-a-falhas)
+- [5. Simulação de Falhas](#5-simulação-de-falhas)
+- [6. Estrutura do Repositório](#6-estrutura-do-repositório)
+- [7. Status e Próximos Passos](#7-status-e-próximos-passos)
+- [8. Convenções](#8-convenções)
+- [9. Equipe](#9-equipe)
+- [10. Referência](#10-referência)
+
+---
+
+## 1. Sobre o Trabalho
+
+O trabalho estuda **como o Amazon DynamoDB tolera falhas sem perder dados confirmados**, a partir do paper que descreve a arquitetura do serviço (Elhemali et al., USENIX ATC 2022).
+
+### Objetivos
+
+- **Fundamentação teórica**: explicar os mecanismos de replicação, consenso e durabilidade descritos nas seções §3 (Arquitetura) e §5 (Durabilidade e corretude) do paper.
+- **Mapa de falhas**: relacionar cada mecanismo ao tipo de falha que ele cobre, ao comportamento esperado e aos seus limites.
+- **Simulação**: desenhar experimentos que observem, do lado do cliente, os efeitos desses mecanismos.
+
+### Pergunta que guia o trabalho
+
+> *"Data should never be lost after it has been committed."* (§5)
+>
+> Que mecanismos sustentam essa garantia, contra quais falhas e a que custo?
+
+---
+
+## 2. Paper Base
+
+**Elhemali et al.** *Amazon DynamoDB: A Scalable, Predictably Performant, and Fully Managed NoSQL Database Service.* 2022 USENIX Annual Technical Conference (ATC '22), pp. 1037–1048.
+
+| Seção do paper | Uso no trabalho |
+|---|---|
+| **§3 Arquitetura** | particionamento, replication groups, Multi-Paxos, lease de liderança, caminho de escrita, storage replica × log replica, microsserviços |
+| **§5 Durabilidade e corretude** | WAL e arquivamento no S3, checksums, scrub, métodos formais, backup e point-in-time restore |
+| **§6 Disponibilidade** (pontual) | quórum 2-de-3 em AZs distintas, detecção de falha cinzenta, entrega de liderança em deploy |
+
+---
+
+## 3. Arquitetura do DynamoDB em Resumo
+
+Uma tabela é dividida em **partições**. Cada partição tem um **replication group** com réplicas em **Availability Zones diferentes**, e um líder eleito por **Multi-Paxos** atende as escritas e as leituras fortemente consistentes.
+
+```mermaid
+flowchart LR
+    C["Cliente / Aplicação"] --> RR["Request router<br/>autentica, autoriza, roteia"]
+    RR -->|lookup| MD["Metadata service<br/>partições e replication groups"]
+    RR -->|leituras e escritas| RG
+
+    subgraph RG ["Replication group de uma partição"]
+        L["Líder<br/>(AZ-a)"]
+        F1["Follower<br/>(AZ-b)"]
+        F2["Follower<br/>(AZ-c)"]
+        L -- "WAL" --> F1
+        L -- "WAL" --> F2
+    end
+
+    AA["Autoadmin<br/>saúde da frota"] -. "substitui réplicas insalubres" .-> RG
+    RG -. "arquiva WAL" .-> S3[("Amazon S3")]
+```
+
+Pontos centrais:
+
+- **A escrita é confirmada quando um quórum de réplicas persiste o registro no write-ahead log (WAL)**, e não quando a B-tree é atualizada. A durabilidade vem do log.
+- **A unidade de falha é o replication group de uma partição**, nunca a tabela inteira.
+- **Log replicas** guardam só o WAL recente e são adicionadas em segundos, cobrindo a janela em que uma storage replica está sendo reconstruída.
+
+Detalhes em [`docs/paper/secao-3-arquitetura.md`](docs/paper/secao-3-arquitetura.md).
+
+---
+
+## 4. Mecanismos de Tolerância a Falhas
+
+O paper organiza a perda de dados em quatro causas, cada uma com seus mecanismos:
+
+| Causa | Mecanismos principais | Seção |
+|---|---|---|
+| **Falha de hardware** (disco, nó, AZ) | WAL em 3 réplicas, arquivamento no S3, log replica, autoadmin | §3, §5.1 |
+| **Falha de liderança e de rede** | Multi-Paxos, leadership lease, quórum de escrita, confirmação entre pares | §3, §6 |
+| **Erros silenciosos** (bit rot, bugs de hardware) | checksums em toda transferência, manifesto, verificação cruzada, scrub | §5.2, §5.3 |
+| **Bugs de software** | TLA+ e model checking, failure injection, power-off tests | §5.4 |
+| **Corrupção lógica** (erro da aplicação) | backup on-demand, point-in-time restore, escrita condicional, transações | §3, §5.5 |
+
+### Limites discutidos no trabalho
+
+1. **Durabilidade e disponibilidade são negociadas.** Sem quórum, a partição fica indisponível para escrita em vez de aceitar uma escrita insegura.
+2. **A janela do lease é indisponibilidade de projeto.** Ela evita dois líderes ao custo de alguns segundos sem escrita.
+3. **O WAL ainda não arquivado é o ponto mais frágil.** É esse intervalo que a log replica protege.
+4. **Detectar não é corrigir.** Checksum e scrub encontram o erro; a correção vem de outra cópia.
+5. **Nada em §5.1–§5.4 protege contra erro da aplicação.** Para isso existe o restore (§5.5).
+
+O mapa completo (mecanismo → falha, falha → cadeia de reação e limites) está em [`docs/paper/mapa-conceito-cenario-falha.md`](docs/paper/mapa-conceito-cenario-falha.md).
+
+---
+
+## 5. Simulação de Falhas
+
+> [!IMPORTANT]
+> No DynamoDB gerenciado, o cliente **não consegue** derrubar storage nodes, forçar eleição de líder ou corromper um disco. Os mecanismos internos não são injetáveis: só os seus **efeitos de ponta a ponta** podem ser observados.
+
+Experimentos planejados:
+
+| Mecanismo | O que observar | Como |
+|---|---|---|
+| Point-in-time restore (§5.5) | recuperação de corrupção lógica | apagar/corromper itens conhecidos, restaurar para um instante anterior em tabela nova e comparar item a item |
+| Backup on-demand (§5.5) | consistência entre partições | escrever em várias partições durante o backup e verificar o corte temporal |
+| Escrita condicional (§3) | prevenção de sobrescrita concorrente | dois clientes concorrentes, com e sem condição; contar escritas perdidas |
+| Transações ACID (§3) | atomicidade multi-item | transação que falha no meio; verificar ausência de estado parcial |
+| Leitura forte × eventual (§3) | divergência entre réplicas | escrever e ler em seguida nos dois modos; medir a divergência |
+| Quórum e failover (§3, §6) | efeito agregado | medir latência e erros sob carga sustentada |
+
+Para o que não pode ser injetado na nuvem, a alternativa é **reproduzir o mecanismo em ambiente controlado** (por exemplo, um pequeno grupo Raft/Paxos local) usando o paper como referência do comportamento esperado.
+
+---
+
+## 6. Estrutura do Repositório
+
+```text
+tolerancia-falhas-dynamodb/
+├── README.md
+└── docs/
+    └── paper/
+        ├── README.md                       # índice do material de estudo
+        ├── secao-3-arquitetura.md          # estudo dirigido da §3
+        ├── secao-5-durabilidade.md         # estudo dirigido da §5
+        └── mapa-conceito-cenario-falha.md  # mapa mecanismo → falha → limite
+```
+
+### Como usar o material
+
+- **Para estudar o paper:** §3 → §5 → mapa. Cada resumo termina com perguntas de verificação.
+- **Para escrever a fundamentação teórica:** os resumos de §3 e §5 já estão em paráfrase, com referência de subseção.
+- **Para desenhar a simulação:** partes B (cadeia de reação a cada falha) e D (o que é observável pelo cliente) do mapa.
+
+---
+
+## 7. Status e Próximos Passos
+
+- [x] Estudo dirigido da §3 (Arquitetura)
+- [x] Estudo dirigido da §5 (Durabilidade e corretude)
+- [x] Mapa conceito → cenário de falha
+- [ ] Definição do ambiente da simulação (DynamoDB na AWS, DynamoDB Local e/ou cluster local)
+- [ ] Implementação dos experimentos
+- [ ] Coleta e análise dos resultados
+- [ ] Relatório final e apresentação
+
+---
+
+## 8. Convenções
+
+- **Paráfrase com referência**: o material em `docs/paper/` é paráfrase do original, com referências no formato `§3`, `§5.1`. Quando um raciocínio depende de §6, isso está indicado.
+- **Conteúdo próprio separado**: a parte D do mapa (ponte para a simulação) é do grupo e não vem do paper.
+- **Valores datados**: números do paper refletem o serviço em 2022 (por exemplo, a janela de 35 dias do PITR) e devem ser conferidos na documentação atual da AWS.
+
+---
+
+## 9. Equipe
+
+- **Anna Beatriz Bernardo** ([@nanameetscode](https://github.com/nanameetscode))
+- **Andrey Noewertton** ([@AndyFerr](https://github.com/AndyFerr))
+- **Marcos Ryan**
+
+Instituto de Computação (IC) — **Universidade Federal de Alagoas (UFAL)**.
+
+---
+
+## 10. Referência
+
+Mostafa Elhemali, Niall Gallagher, Nicholas Gordon, Joseph Idziorek, Richard Krog, Colin Lazier, Erben Mo, Akhilesh Mritunjai, Somu Perianayagam, Tim Rath, Swami Sivasubramanian, James Christopher Sorenson III, Sroaj Sosothikul, Doug Terry, Akshat Vig. **Amazon DynamoDB: A Scalable, Predictably Performant, and Fully Managed NoSQL Database Service.** In: *2022 USENIX Annual Technical Conference (USENIX ATC '22)*, pp. 1037–1048.
