@@ -1,8 +1,8 @@
 # Tolerância a Falhas com Amazon DynamoDB
 
 [![Amazon DynamoDB](https://img.shields.io/badge/Amazon-DynamoDB-4053D6?style=for-the-badge&logo=amazondynamodb&logoColor=white)](https://aws.amazon.com/dynamodb/)
-[![USENIX ATC 2022](https://img.shields.io/badge/Paper-USENIX%20ATC%20'22-8B0000?style=for-the-badge)](#10-referência)
-[![Status](https://img.shields.io/badge/Status-Em%20andamento-yellow?style=for-the-badge)](#7-status-e-próximos-passos)
+[![USENIX ATC 2022](https://img.shields.io/badge/Paper-USENIX%20ATC%20'22-8B0000?style=for-the-badge)](#8-referência)
+[![Status](https://img.shields.io/badge/Status-Em%20andamento-yellow?style=for-the-badge)](#6-status-e-próximos-passos)
 [![UFAL](https://img.shields.io/badge/UFAL-Ciência%20da%20Computação-red?style=for-the-badge)](https://ic.ufal.br/)
 
 Trabalho acadêmico da disciplina de **Sistemas Distribuídos**, no curso de **Bacharelado em Ciência da Computação** do **Instituto de Computação (IC)** da **Universidade Federal de Alagoas (UFAL)**.
@@ -18,11 +18,9 @@ Trabalho acadêmico da disciplina de **Sistemas Distribuídos**, no curso de **B
 - [3. Arquitetura do DynamoDB em Resumo](#3-arquitetura-do-dynamodb-em-resumo)
 - [4. Mecanismos de Tolerância a Falhas](#4-mecanismos-de-tolerância-a-falhas)
 - [5. Simulação de Falhas](#5-simulação-de-falhas)
-- [6. Estrutura do Repositório](#6-estrutura-do-repositório)
-- [7. Status e Próximos Passos](#7-status-e-próximos-passos)
-- [8. Convenções](#8-convenções)
-- [9. Equipe](#9-equipe)
-- [10. Referência](#10-referência)
+- [6. Status e Próximos Passos](#6-status-e-próximos-passos)
+- [7. Equipe](#7-equipe)
+- [8. Referência](#8-referência)
 
 ---
 
@@ -53,6 +51,8 @@ O trabalho estuda **como o Amazon DynamoDB tolera falhas sem perder dados confir
 | **§3 Arquitetura** | particionamento, replication groups, Multi-Paxos, lease de liderança, caminho de escrita, storage replica × log replica, microsserviços |
 | **§5 Durabilidade e corretude** | WAL e arquivamento no S3, checksums, scrub, métodos formais, backup e point-in-time restore |
 | **§6 Disponibilidade** (pontual) | quórum 2-de-3 em AZs distintas, detecção de falha cinzenta, entrega de liderança em deploy |
+
+O material de estudo está em [`docs/paper/`](docs/paper/), em paráfrase do original com referências de seção (`§3`, `§5.1`). Os números do paper refletem o serviço em 2022 (por exemplo, a janela de 35 dias do PITR) e devem ser conferidos na documentação atual da AWS.
 
 ---
 
@@ -132,28 +132,7 @@ Para o que não pode ser injetado na nuvem, a alternativa é **reproduzir o meca
 
 ---
 
-## 6. Estrutura do Repositório
-
-```text
-tolerancia-falhas-dynamodb/
-├── README.md
-└── docs/
-    └── paper/
-        ├── README.md                       # índice do material de estudo
-        ├── secao-3-arquitetura.md          # estudo dirigido da §3
-        ├── secao-5-durabilidade.md         # estudo dirigido da §5
-        └── mapa-conceito-cenario-falha.md  # mapa mecanismo → falha → limite
-```
-
-### Como usar o material
-
-- **Para estudar o paper:** §3 → §5 → mapa. Cada resumo termina com perguntas de verificação.
-- **Para escrever a fundamentação teórica:** os resumos de §3 e §5 já estão em paráfrase, com referência de subseção.
-- **Para desenhar a simulação:** partes B (cadeia de reação a cada falha) e D (o que é observável pelo cliente) do mapa.
-
----
-
-## 7. Status e Próximos Passos
+## 6. Status e Próximos Passos
 
 - [x] Estudo dirigido da §3 (Arquitetura)
 - [x] Estudo dirigido da §5 (Durabilidade e corretude)
@@ -165,15 +144,7 @@ tolerancia-falhas-dynamodb/
 
 ---
 
-## 8. Convenções
-
-- **Paráfrase com referência**: o material em `docs/paper/` é paráfrase do original, com referências no formato `§3`, `§5.1`. Quando um raciocínio depende de §6, isso está indicado.
-- **Conteúdo próprio separado**: a parte D do mapa (ponte para a simulação) é do grupo e não vem do paper.
-- **Valores datados**: números do paper refletem o serviço em 2022 (por exemplo, a janela de 35 dias do PITR) e devem ser conferidos na documentação atual da AWS.
-
----
-
-## 9. Equipe
+## 7. Equipe
 
 - **Anna Beatriz Bernardo** ([@nanameetscode](https://github.com/nanameetscode))
 - **Andrey Noewertton** ([@AndyFerr](https://github.com/AndyFerr))
@@ -183,6 +154,6 @@ Instituto de Computação (IC) — **Universidade Federal de Alagoas (UFAL)**.
 
 ---
 
-## 10. Referência
+## 8. Referência
 
 Mostafa Elhemali, Niall Gallagher, Nicholas Gordon, Joseph Idziorek, Richard Krog, Colin Lazier, Erben Mo, Akhilesh Mritunjai, Somu Perianayagam, Tim Rath, Swami Sivasubramanian, James Christopher Sorenson III, Sroaj Sosothikul, Doug Terry, Akshat Vig. **Amazon DynamoDB: A Scalable, Predictably Performant, and Fully Managed NoSQL Database Service.** In: *2022 USENIX Annual Technical Conference (USENIX ATC '22)*, pp. 1037–1048.
