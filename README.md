@@ -1,8 +1,8 @@
 # Tolerância a Falhas com Amazon DynamoDB
 
 [![Amazon DynamoDB](https://img.shields.io/badge/Amazon-DynamoDB-4053D6?style=for-the-badge&logo=amazondynamodb&logoColor=white)](https://aws.amazon.com/dynamodb/)
-[![USENIX ATC 2022](https://img.shields.io/badge/Paper-USENIX%20ATC%20'22-8B0000?style=for-the-badge)](#8-referência)
-[![Status](https://img.shields.io/badge/Status-Em%20andamento-yellow?style=for-the-badge)](#6-status-e-próximos-passos)
+[![USENIX ATC 2022](https://img.shields.io/badge/Paper-USENIX%20ATC%20'22-8B0000?style=for-the-badge)](#9-referência)
+[![Status](https://img.shields.io/badge/Status-Em%20andamento-yellow?style=for-the-badge)](#7-status-e-próximos-passos)
 [![UFAL](https://img.shields.io/badge/UFAL-Ciência%20da%20Computação-red?style=for-the-badge)](https://ic.ufal.br/)
 
 Trabalho acadêmico da disciplina de **Sistemas Distribuídos**, no curso de **Bacharelado em Ciência da Computação** do **Instituto de Computação (IC)** da **Universidade Federal de Alagoas (UFAL)**.
@@ -18,9 +18,10 @@ Trabalho acadêmico da disciplina de **Sistemas Distribuídos**, no curso de **B
 - [3. Arquitetura do DynamoDB em Resumo](#3-arquitetura-do-dynamodb-em-resumo)
 - [4. Mecanismos de Tolerância a Falhas](#4-mecanismos-de-tolerância-a-falhas)
 - [5. Simulação de Falhas](#5-simulação-de-falhas)
-- [6. Status e Próximos Passos](#6-status-e-próximos-passos)
-- [7. Equipe](#7-equipe)
-- [8. Referência](#8-referência)
+- [6. Infraestrutura](#6-infraestrutura)
+- [7. Status e Próximos Passos](#7-status-e-próximos-passos)
+- [8. Equipe](#8-equipe)
+- [9. Referência](#9-referência)
 
 ---
 
@@ -132,19 +133,37 @@ Para o que não pode ser injetado na nuvem, a alternativa é **reproduzir o meca
 
 ---
 
-## 6. Status e Próximos Passos
+## 6. Infraestrutura
 
-- [x] Estudo dirigido da §3 (Arquitetura)
-- [x] Estudo dirigido da §5 (Durabilidade e corretude)
-- [x] Mapa conceito → cenário de falha
-- [ ] Definição do ambiente da simulação (DynamoDB na AWS, DynamoDB Local e/ou cluster local)
-- [ ] Implementação dos experimentos
-- [ ] Coleta e análise dos resultados
-- [ ] Relatório final e apresentação
+A infraestrutura é descrita em Terraform e verificada por scripts Python:
+
+```text
+terraform/   tabela global Estoque (sa-east-1, us-east-1, eu-west-1; PITR) e tabela EstoqueThrottle (1 WCU)
+scripts/     01_setup_table.py (verifica), 02_seed_data.py (50 produtos × 100 unidades), 03_reset.py
+lab/         código comum: configuração e acesso ao DynamoDB por Região
+```
+
+Cada item gravado leva `versao`, `atualizado_em` e `regiao_escrita`, para que os logs dos experimentos identifiquem Região, versão e momento de cada escrita.
+
+O passo a passo (criar, popular, resetar, destruir e controlar custo) está em [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ---
 
-## 7. Equipe
+## 7. Status e Próximos Passos
+
+- [x] Estudo dirigido da §3 (Arquitetura) e da §5 (Durabilidade e corretude)
+- [x] Mapa conceito → cenário de falha
+- [x] Terraform e scripts de setup, seed e reset (escritos; falta aplicar na AWS)
+- [ ] Conta AWS do grupo com credenciais nas 3 Regiões e alerta de custo
+- [ ] Infraestrutura aplicada e seed validado nas 3 Regiões
+- [ ] Implementação dos cenários de falha
+- [ ] Backend e dashboard
+- [ ] Coleta e análise dos resultados
+- [ ] Relatório final, vídeo e apresentação
+
+---
+
+## 8. Equipe
 
 - **Anna Beatriz Bernardo** ([@nanameetscode](https://github.com/nanameetscode))
 - **Andrey Noewertton** ([@AndyFerr](https://github.com/AndyFerr))
@@ -154,6 +173,6 @@ Instituto de Computação (IC) — **Universidade Federal de Alagoas (UFAL)**.
 
 ---
 
-## 8. Referência
+## 9. Referência
 
 Mostafa Elhemali, Niall Gallagher, Nicholas Gordon, Joseph Idziorek, Richard Krog, Colin Lazier, Erben Mo, Akhilesh Mritunjai, Somu Perianayagam, Tim Rath, Swami Sivasubramanian, James Christopher Sorenson III, Sroaj Sosothikul, Doug Terry, Akshat Vig. **Amazon DynamoDB: A Scalable, Predictably Performant, and Fully Managed NoSQL Database Service.** In: *2022 USENIX Annual Technical Conference (USENIX ATC '22)*, pp. 1037–1048.
