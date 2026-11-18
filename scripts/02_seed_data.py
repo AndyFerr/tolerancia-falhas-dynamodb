@@ -1,7 +1,8 @@
 """Popula a tabela global: 50 produtos com 100 unidades cada.
 
 Escreve na Região primária e espera a replicação chegar às outras Regiões.
-Ao final, cada Região deve somar 5.000 unidades.
+Ao final, cada Região deve somar 5.000 unidades. Na EstoqueThrottle entra
+apenas o produto do Cenário B (prod-007): a 1 WCU, semear 50 itens seria lento.
 
 Uso: python scripts/02_seed_data.py [--espera 60]
 """
@@ -12,6 +13,7 @@ import time
 import _caminho  # noqa: F401
 from lab import aws, config
 
+PRODUTO_THROTTLE = 7   # produto usado pelo Cenário B; precisa bater com prod-007 no contrato
 ESPERADO_ITENS = config.TOTAL_PRODUTOS
 ESPERADO_UNIDADES = config.TOTAL_PRODUTOS * config.UNIDADES_POR_PRODUTO
 
@@ -21,6 +23,11 @@ def semear(cfg, escritor: str = "seed") -> None:
     with t.batch_writer() as lote:
         for n in range(1, config.TOTAL_PRODUTOS + 1):
             lote.put_item(Item=aws.item_estoque(n, cfg.primaria, escritor))
+
+    # Tabela de throttling: um único produto, porque ela tem 1 WCU.
+    aws.tabela(cfg.primaria, cfg.tabela_throttle).put_item(
+        Item=aws.item_estoque(PRODUTO_THROTTLE, cfg.primaria, escritor)
+    )
 
 
 def conferir(cfg, espera_s: int) -> bool:
