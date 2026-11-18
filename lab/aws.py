@@ -10,7 +10,9 @@ def cliente(regiao: str, *, tentativas: int | None = None, endpoint_url: str | N
     """Cliente DynamoDB de baixo nível para uma Região.
 
     tentativas=1 desliga os retries do SDK, para que o cenário controle o backoff.
-    endpoint_url permite apontar para um endpoint inválido e simular a Região fora do ar.
+    endpoint_url aponta para outro endpoint: serve para testar o caminho de erro
+    do cliente. NÃO é a forma de simular queda de Região: o Cenário A remove a
+    réplica de verdade, porque só assim existe convergência para medir.
     """
     import boto3
     from botocore.config import Config as BotoConfig
@@ -45,6 +47,7 @@ def item_estoque(n: int, regiao: str, escritor: str, quantidade: int = config.UN
         "produto_id": config.id_produto(n),
         "nome": f"Produto {n:03d}",
         "quantidade": quantidade,
+        "preco": config.preco(n),
         "versao": versao,
         "atualizado_em": iso(),
         "regiao_escrita": regiao,
@@ -53,14 +56,20 @@ def item_estoque(n: int, regiao: str, escritor: str, quantidade: int = config.UN
 
 
 def resumo_regiao(regiao: str, nome: str) -> dict:
-    """Conta itens e soma unidades de uma Região com Scan paginado (tabela pequena)."""
+    """Conta itens, soma unidades e valor (preco × quantidade) de uma Região.
+
+    Scan paginado: a tabela é pequena. O valor é o checksum de negócio do Cenário D.
+    """
     t = tabela(regiao, nome)
-    itens, unidades, kwargs = 0, 0, {"ProjectionExpression": "quantidade"}
+    itens, unidades, valor = 0, 0, Decimal(0)
+    kwargs = {"ProjectionExpression": "quantidade, preco"}
     while True:
         pagina = t.scan(**kwargs)
         for it in pagina.get("Items", []):
             itens += 1
-            unidades += int(it.get("quantidade", Decimal(0)))
+            q = int(it.get("quantidade", 0))
+            unidades += q
+            valor += Decimal(it.get("preco", 0)) * q
         if "LastEvaluatedKey" not in pagina:
-            return {"itens": itens, "unidades": unidades}
+            return {"itens": itens, "unidades": unidades, "valor": valor}
         kwargs["ExclusiveStartKey"] = pagina["LastEvaluatedKey"]

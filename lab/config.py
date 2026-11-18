@@ -6,6 +6,7 @@ LAB_REGIOES          Regiões separadas por vírgula; a primeira é a primária
 """
 import os
 from dataclasses import dataclass
+from decimal import Decimal
 
 TOTAL_PRODUTOS = 50
 UNIDADES_POR_PRODUTO = 100
@@ -37,3 +38,11 @@ def carregar() -> Config:
 
 def id_produto(n: int) -> str:
     return f"prod-{n:03d}"
+
+
+def preco(n: int) -> Decimal:
+    """Preço unitário determinístico: mantém o valor total do estoque reproduzível.
+
+    Devolve Decimal construído a partir de string, porque o boto3 recusa float.
+    """
+    return Decimal(f"{19.90 + (n % 20) * 5:.2f}")
