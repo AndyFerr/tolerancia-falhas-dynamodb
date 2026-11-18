@@ -5,7 +5,7 @@
 ## 0. Pré-requisitos
 
 - Python 3.11 ou mais novo
-- Terraform 1.5 ou mais novo
+- Terraform 1.10 ou mais novo
 - AWS CLI v2 configurada (`aws configure`) com um usuário IAM do grupo, não o usuário raiz
 - Permissões: DynamoDB (tabelas, réplicas, backups), CloudWatch (leitura) e Budgets, nas três Regiões
 
@@ -16,7 +16,27 @@ pip install -r requirements.txt
 aws sts get-caller-identity      # confirma a conta e o usuário
 ```
 
-## 1. Criar a infraestrutura
+## 1. Validar o Terraform sem conta AWS
+
+Confere a sintaxe e a configuração. Não toca na AWS nem gera custo.
+
+```bash
+cd terraform
+terraform init -backend=false
+terraform validate
+cd ..
+```
+
+## 2. Criar a infraestrutura
+
+Se a equipe optar por state remoto, crie o bucket **antes** do primeiro `init` (o Terraform não consegue criar o bucket onde ele mesmo guarda o state):
+
+```bash
+aws s3api create-bucket --bucket NOME-DO-BUCKET \
+  --region sa-east-1 \
+  --create-bucket-configuration LocationConstraint=sa-east-1
+```
+
 
 ```bash
 cd terraform
@@ -32,27 +52,27 @@ O que é criado:
 | Recurso | Configuração |
 |---|---|
 | Tabela global `Estoque` | `sa-east-1` (primária), réplicas em `us-east-1` e `eu-west-1`; modo MREC; sob demanda; PITR ligado |
-| Tabela `EstoqueThrottle` | só em `sa-east-1`; provisionada a 1 WCU / 1 RCU (cenário de throttling) |
+| Tabela `EstoqueThrottle` | só em `sa-east-1`; provisionada a 1 WCU / 1 RCU (Cenário B); o seed grava só o `prod-007` |
 | Orçamento | alerta por e-mail em 50% e 100% do limite (só se `email_alerta_custo` for preenchido) |
 
 Criar as réplicas leva alguns minutos.
 
-## 2. Verificar e popular
+## 3. Verificar e popular
 
 ```bash
-python scripts/01_setup_table.py    # espera ACTIVE nas 3 Regiões e confere o PITR
+python scripts/01_setup_table.py    # espera ACTIVE nas 3 Regiões, confere o PITR e a EstoqueThrottle
 python scripts/02_seed_data.py      # 50 produtos × 100 unidades
 ```
 
 O esperado é 5.000 unidades em cada Região.
 
-## 3. Voltar ao estado inicial entre execuções
+## 4. Voltar ao estado inicial entre execuções
 
 ```bash
 python scripts/03_reset.py
 ```
 
-## 4. Destruir tudo
+## 5. Destruir tudo
 
 ```bash
 cd terraform
@@ -61,7 +81,7 @@ terraform destroy
 
 Depois, conferir no console das três Regiões se não sobrou tabela. Tabelas criadas por restauração (PITR) não estão no Terraform e precisam ser apagadas à mão.
 
-## 5. Custo
+## 6. Custo
 
 - `Estoque` é sob demanda: paga por requisição, e cada escrita é cobrada também nas Regiões de réplica.
 - `EstoqueThrottle` tem 1 WCU e 1 RCU provisionados.

@@ -118,18 +118,14 @@ O mapa completo (mecanismo → falha, falha → cadeia de reação e limites) es
 > [!IMPORTANT]
 > No DynamoDB gerenciado, o cliente **não consegue** derrubar storage nodes, forçar eleição de líder ou corromper um disco. Os mecanismos internos não são injetáveis: só os seus **efeitos de ponta a ponta** podem ser observados.
 
-Experimentos planejados:
+Cenários do laboratório (detalhes de parâmetros e métricas em [`docs/CONTRATOS.md`](docs/CONTRATOS.md)):
 
-| Mecanismo | O que observar | Como |
-|---|---|---|
-| Point-in-time restore (§5.5) | recuperação de corrupção lógica | apagar/corromper itens conhecidos, restaurar para um instante anterior em tabela nova e comparar item a item |
-| Backup on-demand (§5.5) | consistência entre partições | escrever em várias partições durante o backup e verificar o corte temporal |
-| Escrita condicional (§3) | prevenção de sobrescrita concorrente | dois clientes concorrentes, com e sem condição; contar escritas perdidas |
-| Transações ACID (§3) | atomicidade multi-item | transação que falha no meio; verificar ausência de estado parcial |
-| Leitura forte × eventual (§3) | divergência entre réplicas | escrever e ler em seguida nos dois modos; medir a divergência |
-| Quórum e failover (§3, §6) | efeito agregado | medir latência e erros sob carga sustentada |
-
-Para o que não pode ser injetado na nuvem, a alternativa é **reproduzir o mecanismo em ambiente controlado** (por exemplo, um pequeno grupo Raft/Paxos local) usando o paper como referência do comportamento esperado.
+| Cenário | O que provoca | O que mede | Paper |
+|---|---|---|---|
+| **A** — falha de região | remove uma réplica via `UpdateTable`, vende na região sobrevivente e recria a réplica | vendas aceitas durante a queda e tempo de convergência | §3, §6.1 |
+| **B** — throttling | 100 vendas no mesmo produto em tabela de 1 WCU, sem retry e depois com backoff exponencial | vendas perdidas e tentativas por fase | §4 |
+| **C** — conflito | duas regiões vendendo o mesmo produto ao mesmo tempo, com e sem escrita condicional | sobrevendas e tempo de convergência | §3 |
+| **D** — recuperação | zera a quantidade de 40 produtos e restaura por PITR em tabela nova | divergências e valor de estoque antes e depois | §5.5 |
 
 ---
 
