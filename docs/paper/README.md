@@ -6,6 +6,7 @@ Material de estudo das seções §3 (Arquitetura) e §5 (Durabilidade e corretud
 |---|---|
 | [`secao-3-arquitetura.md`](secao-3-arquitetura.md) | modelo de dados, API, particionamento, replication group, Multi-Paxos e lease, caminho de escrita, storage replica × log replica, microsserviços (metadata, request router, storage, autoadmin) |
 | [`secao-5-durabilidade.md`](secao-5-durabilidade.md) | WAL e arquivamento no S3, log replica na cura de réplica, checksums, manifesto e verificação cruzada, scrub, TLA+/model checking, backup e point-in-time restore |
+| [`secao-4-6-capacidade-disponibilidade.md`](secao-4-6-capacidade-disponibilidade.md) | §4 admission control, bursting, adaptive capacity, GAC, split por consumo, on-demand; §6 quórum 2-de-3, lease, falha cinzenta, deployments, estabilidade estática, MemDS |
 | [`mapa-conceito-cenario-falha.md`](mapa-conceito-cenario-falha.md) | **mapa conceito → cenário de falha**: mecanismo→falha coberta (A), falha→cadeia de reação (B), limites de §3/§5 (C), ponte para a simulação do trabalho (D) |
 
 ## Como usar
