@@ -1,0 +1,10 @@
+# State remoto opcional. Crie o bucket antes e troque o nome.
+# use_lockfile exige Terraform 1.10 ou mais novo.
+terraform {
+  backend "s3" {
+    bucket       = "TROQUE-pelo-bucket-do-grupo"
+    key          = "tolerancia-falhas-dynamodb/terraform.tfstate"
+    region       = "sa-east-1"
+    use_lockfile = true
+  }
+}
