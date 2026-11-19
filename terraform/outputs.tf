@@ -3,8 +3,8 @@ output "tabela" {
 }
 
 output "regioes" {
-  description = "Use em LAB_REGIOES (a primeira é a primária)."
-  value       = join(",", concat([var.regiao_primaria], var.regioes_replica))
+  description = "Use em LAB_REGIOES."
+  value       = var.regiao_primaria
 }
 
 output "tabela_throttle" {

@@ -1,5 +1,6 @@
 # Tabela global Estoque (global tables versão 2019.11.21, modo MREC).
 # Sob demanda: a capacidade não interfere nos cenários de replicação.
+
 resource "aws_dynamodb_table" "estoque" {
   name         = var.tabela
   billing_mode = "PAY_PER_REQUEST"
@@ -17,14 +18,6 @@ resource "aws_dynamodb_table" "estoque" {
   # PITR na Região primária (pré-requisito do Cenário D).
   point_in_time_recovery {
     enabled = true
-  }
-
-  dynamic "replica" {
-    for_each = toset(var.regioes_replica)
-    content {
-      region_name            = replica.value
-      point_in_time_recovery = true
-    }
   }
 }
 

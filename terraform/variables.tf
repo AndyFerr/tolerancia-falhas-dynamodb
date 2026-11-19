@@ -1,13 +1,7 @@
 variable "regiao_primaria" {
-  description = "Região onde a tabela é criada e de onde o cliente escreve por padrão."
+  description = "Região única do projeto. A conta não suporta recursos entre regiões."
   type        = string
-  default     = "sa-east-1"
-}
-
-variable "regioes_replica" {
-  description = "Regiões que recebem réplicas da tabela global (modo MREC)."
-  type        = list(string)
-  default     = ["us-east-1", "eu-west-1"]
+  default     = "us-east-1"
 }
 
 variable "tabela" {
