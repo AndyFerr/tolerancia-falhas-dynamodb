@@ -2,7 +2,22 @@
 
 > Entregável da linha **A6**. Fecha o Marco 1 junto com `docs/CONTRATOS.md` (A7) e `docs/RISCOS.md` (A8).
 >
-> Formato dos dados e das métricas: `docs/CONTRATOS.md`. Fundamentação: `docs/paper/`.
+> **Versão 2 — projeto de região única.** A conta AWS do grupo foi criada pela nova experiência de cadastro, que atribui uma única região ao projeto e não suporta recursos entre regiões. Global Tables, portanto, está fora. O registro completo dessa restrição e das alternativas descartadas está em `docs/RISCOS.md` (I4).
+
+## O que mudou em relação à versão 1
+
+| Cenário | Antes | Agora |
+|---|---|---|
+| **A** | falha de região: remover réplica e medir convergência | **atomicidade: escrita parcial vs. transação** |
+| **B** | throttling em produto quente | inalterado |
+| **C** | conflito entre regiões com last-writer-wins | **concorrência dentro de uma região: atualização perdida vs. escrita condicional** |
+| **D** | recuperação via PITR | inalterado |
+
+As letras foram mantidas de propósito: os nomes de arquivo (`scenarios/cenario_a.py`, `results/cenario_a_*.json`) e os endpoints (`/cenario/a`) seguem válidos. O que mudou foi o conteúdo do A e os modos do C.
+
+**O que o projeto perdeu:** disponibilidade sob falha de região (§6.1). Nenhum experimento cobre mais essa promessa, e isso precisa estar escrito no relatório como limitação de ambiente — não omitido.
+
+**O que o projeto ganhou:** o Cenário A passou de três minutos de operação de réplica ao vivo para uma execução de segundos e determinística. O maior risco da apresentação desapareceu junto com a restrição.
 
 ## Como ler este documento
 
@@ -12,67 +27,71 @@ A **hipótese** é uma previsão falsificável sobre o comportamento do DynamoDB
 
 O **critério de sucesso da execução** é o que diz se o experimento rodou direito: estado inicial correto, todas as etapas concluídas, métricas gravadas. Uma execução bem-sucedida com hipótese refutada é um bom experimento. Uma execução que não completou não é experimento nenhum.
 
-**Nenhum número esperado entra como critério de aprovação.** Se o Cenário C medir zero sobrevendas, isso é um achado sobre a janela de concorrência ou sobre a replicação, e vai para o relatório como tal.
+**Nenhum número esperado entra como critério de aprovação.**
 
 ## Visão geral
 
 | Cenário | Pergunta | Mecanismo do paper | Métrica-alvo |
 |---|---|---|---|
-| **A** | a aplicação continua escrevendo com uma região fora, e quando o dado reaparece lá? | §3 replicação; §6.1 quórum | vendas aceitas; tempo de convergência |
+| **A** | uma operação de dois passos pode deixar estado pela metade? | §3 transações ACID entre itens | unidades perdidas na transferência |
 | **B** | o que o admission control faz com carga acima do teto, e quanto depende do cliente? | §4 admission control; §4.4 item quente | vendas perdidas por fase |
-| **C** | o que acontece quando duas regiões vendem o mesmo produto ao mesmo tempo? | §3 escrita condicional; replicação LWW | sobrevendas por modo |
+| **C** | dois processos vendendo o mesmo produto ao mesmo tempo — o estoque fica certo? | §3 escrita condicional | sobrevendas por modo |
 | **D** | dá para desfazer um erro lógico da aplicação? | §5.5 backup e PITR | divergências; checksum |
 
 ## Protocolo comum
 
-Vale para os quatro:
-
-1. **Reset antes de cada execução.** `scripts/03_reset.py` ou `POST /reset`. Sem estado inicial conhecido, nenhuma métrica significa coisa alguma. O erro `ESTOQUE_NAO_RESETADO` existe para abortar em vez de produzir número inválido.
-2. **Três execuções por cenário** na fase de desenvolvimento (linha C4) e **duas rodadas completas** na Semana 7 (linha G1). Uma medição isolada em sistema distribuído é anedota, não dado.
+1. **Reset antes de cada execução.** `scripts/03_reset.py` ou `POST /reset`. Sem estado inicial conhecido, nenhuma métrica significa coisa alguma.
+2. **Três execuções por cenário** na fase de desenvolvimento e **duas rodadas completas** na Semana 7.
 3. **Toda execução grava arquivo**, inclusive a que falha — com `status: "erro"` e a etapa onde parou.
-4. **Nenhum parâmetro muda entre as três execuções.** Variar e repetir ao mesmo tempo impede saber a que atribuir a diferença.
+4. **Nenhum parâmetro muda entre as três execuções.**
 
 ---
 
-# Cenário A — falha de região
+# Cenário A — escrita parcial vs. transação
 
 ## Pergunta
 
-Com uma região indisponível, a aplicação continua aceitando vendas? Quando a região volta, quanto tempo até ela refletir o que foi vendido na ausência dela?
+Uma operação que precisa de duas escritas para estar correta pode terminar pela metade? E o que muda quando ela é feita dentro de uma transação?
 
-## O que este cenário realmente mede
+## O caso
 
-Ponto que precisa estar claro no relatório, porque é fácil errar: remover uma réplica de **Global Table** retira uma **cópia regional inteira** — não um membro do quórum Paxos.
+Uma **transferência de estoque** entre dois produtos: tirar 10 unidades de `prod-001` e colocar em `prod-050`. São duas escritas, e o sistema só está correto se as duas acontecerem ou nenhuma acontecer.
 
-O quórum de duas em três réplicas em AZs distintas (§6.1) é interno a **cada região**: cada região tem o seu próprio replication group por partição. Remover a réplica de `us-east-1` não toca no grupo de replicação de `sa-east-1`, que permanece íntegro.
+A falha é provocada por uma regra de negócio legítima no destino: `prod-050` tem um **limite de prateleira**, e a escrita no destino carrega `ConditionExpression: quantidade <= :limite`. O produto é preparado acima desse limite, então a segunda escrita **sempre falha**.
 
-Portanto este cenário mede a **replicação assíncrona entre regiões** das Global Tables, e não o consenso Multi-Paxos da §3. A ligação com §6.1 é por **contraste**, e é justamente o que torna a discussão interessante: dois mecanismos de tolerância a falhas em camadas diferentes, com garantias diferentes.
+O resultado é determinístico, roda em segundos e não depende de concorrência nem de temporização.
+
+## O invariante
+
+O número total de unidades no estoque **não pode mudar** durante uma transferência. Unidades mudam de prateleira, não somem.
+
+É essa conservação que o cenário mede — e é um critério que qualquer pessoa da banca entende sem explicação técnica.
 
 ## Hipóteses
 
-- **H1** — A taxa de aceitação de escrita em `sa-east-1` permanece em 100% durante toda a ausência de `us-east-1`, porque o grupo de replicação local está intacto e a perda é de uma cópia regional.
-- **H2** — Após a réplica ser recriada, a convergência leva **ordem de minutos**, não de segundos, porque recriar réplica de Global Table copia a tabela inteira (backfill), não apenas o delta.
-- **H3** — Em regime normal, com as três réplicas no ar, a propagação de uma escrita entre regiões leva **ordem de segundos**.
-
-O contraste entre H2 e H3 é o achado principal: o mesmo sistema tem dois tempos de convergência muito diferentes, conforme a réplica esteja sendo reconstruída ou apenas acompanhando.
+- **H1 — `sem_transacao`:** a primeira escrita é confirmada e a segunda falha. O total de unidades **diminui**: as unidades saíram da origem e não chegaram ao destino. `estado_parcial = true`.
+- **H2 — `com_transacao`:** a mesma condição falha, mas `TransactWriteItems` aborta a operação inteira. O total permanece **exatamente igual** e `prod-001` não é tocado.
+- **H3:** a diferença não está no banco. Mesma tabela, mesmos itens, mesma condição, mesmo erro — o que muda é apenas a forma de chamar.
 
 ## Procedimento
 
 | Etapa | Ação |
 |---|---|
-| — | reset e medição da linha de base: escrever 1 item e cronometrar a propagação às 3 regiões (**H3**) |
-| `removendo_replica` | `UpdateTable` com `ReplicaUpdates: [{Delete: {RegionName: "us-east-1"}}]`; aguardar a tabela voltar a `ACTIVE` |
-| `vendendo_durante_queda` | 100 vendas distribuídas entre os 50 produtos, escrevendo em `sa-east-1`, contando aceitas e rejeitadas |
-| `recriando_replica` | `UpdateTable` com `ReplicaUpdates: [{Create: ...}]` |
-| `medindo_convergencia` | consultar `resumo_regiao` em `us-east-1` até `unidades` igualar as outras duas; cronometrar (**H2**) |
+| — | reset; preparar `prod-050` acima do limite de prateleira; registrar `unidades_totais_antes` |
+| `modo_sem_transacao` | `UpdateItem` decrementando `prod-001`; em seguida `UpdateItem` incrementando `prod-050` com a condição que falha; capturar o erro |
+| — | registrar o total; reset |
+| `modo_com_transacao` | as duas mesmas operações dentro de um único `TransactWriteItems`, com a mesma condição; capturar o erro |
+| — | registrar o total |
+
+Cinco rodadas de cada modo.
 
 ## Critério de sucesso da execução
 
-As cinco etapas concluem, a réplica volta a `ACTIVE` e `unidades_por_regiao` fica igual nas três regiões dentro do tempo limite. Qualquer valor de `vendas_aceitas` e `tempo_convergencia_ms` é resultado válido.
+Os dois modos completam as cinco rodadas, o erro da condição é capturado nas duas (a transferência **deve** falhar — é o desenho) e o total de unidades é medido antes e depois de cada modo.
 
 ## O que este cenário não mede
 
-Eleição de líder, janela de lease, falha de AZ, falha de nó. Nenhum desses é provocável pelo cliente — ver `docs/paper/mapa-conceito-cenario-falha.md`, parte D.
+Isolamento sob concorrência real. `TransactWriteItems` oferece as quatro propriedades ACID, mas este cenário exercita atomicidade e consistência, não isolamento entre transações simultâneas.
 
 ---
 
@@ -85,77 +104,80 @@ O que acontece com uma carga acima da capacidade da tabela, e quanto do resultad
 ## Hipóteses
 
 - **H1** — Sem tratamento de retry, a maioria das escritas é rejeitada com `ProvisionedThroughputExceededException`, e a fase termina rápido — falhar é barato.
-- **H2** — Com backoff exponencial e jitter, a taxa de sucesso se aproxima de 100%, **ao custo de uma duração total muito maior**. O banco é o mesmo; o que muda é o cliente.
+- **H2** — Com backoff exponencial e jitter, a taxa de sucesso se aproxima de 100%, **ao custo de uma duração total muito maior**.
 - **H3** — Como a carga se concentra em **um único item**, o throttling **não diminui ao longo da execução**. A §4.4 afirma que tráfego concentrado em um item é um dos dois padrões que o split por consumo não resolve, e que o DynamoDB detecta e evita dividir nesse caso.
 
-H3 é a hipótese mais valiosa: ela testa diretamente uma limitação que o próprio paper declara.
+H3 testa diretamente uma limitação que o próprio paper declara.
 
 ## Procedimento
 
-Roda contra `EstoqueThrottle`, que já está provisionada em 1 WCU — a capacidade é configuração fixa da tabela, não algo que o cenário manipula.
+Roda contra `EstoqueThrottle`, provisionada em 1 WCU — capacidade é configuração fixa da tabela, não algo que o cenário manipula.
 
 | Etapa | Ação |
 |---|---|
 | — | reset; conferir que `prod-007` existe na tabela de throttling |
-| `fase_sem_retry` | 100 vendas em `prod-007` com `aws.cliente(regiao, tentativas=1)`, sem backoff próprio; contar sucesso, throttle e duração |
+| `fase_sem_retry` | 100 vendas em `prod-007` com `aws.cliente(regiao, tentativas=1)`, sem backoff próprio |
 | — | reset |
-| `fase_com_backoff` | mesma carga, com backoff exponencial e jitter implementado no cenário; contar sucesso, throttle, tentativas totais e duração |
+| `fase_com_backoff` | mesma carga, com backoff exponencial e jitter implementado no cenário |
 
-Desligar o retry do SDK é obrigatório nas duas fases. Sem isso, o boto3 aplica o backoff dele por baixo e as duas fases medem a mesma coisa.
+Desligar o retry do SDK é obrigatório nas duas fases: sem isso, o boto3 aplica o backoff dele por baixo e as duas fases medem a mesma coisa.
 
 Para H3, registrar a taxa de throttle **em janelas ao longo da fase 1**, não só o total — é a série temporal que mostra se melhora ou não.
 
 ## Critério de sucesso da execução
 
-As duas fases completam as 100 tentativas e gravam contadores. A diferença entre elas, qualquer que seja, é o resultado.
+As duas fases completam as 100 tentativas e gravam contadores.
 
 ## O que este cenário não mede
 
-Bursting, adaptive capacity e GAC. Todos atuam antes de o cliente ver qualquer coisa, e o sucesso deles é a ausência de sintoma — ver `docs/paper/secao-4-6-capacidade-disponibilidade.md`, parte III.
+Bursting, adaptive capacity e GAC — todos atuam antes de o cliente ver qualquer coisa.
 
 ---
 
-# Cenário C — conflito e sobrevenda
+# Cenário C — atualização perdida e sobrevenda
 
 ## Pergunta
 
-Quando duas regiões vendem a mesma unidade ao mesmo tempo, quem ganha, e a escrita condicional impede o estoque de ficar errado?
+Dois processos vendem o mesmo produto ao mesmo tempo. O estoque final bate com o que foi vendido?
+
+## O que mudou
+
+Na versão anterior este cenário comparava duas regiões sob last-writer-wins. Sem Global Tables, ele passa a exercitar **concorrência dentro de uma região** — o problema clássico de *lost update*, que o paper trata com escrita condicional (§3).
+
+A mudança não é um rebaixamento: a atualização perdida é o modo de falha mais comum em aplicação real com banco chave-valor, e a demonstração continua sendo a mesma — estoque negativo na tela.
 
 ## Hipóteses
 
-Três modos, uma hipótese cada:
+- **H1 — `sem_condicao`:** `sobrevendas > 0`. Dois processos leem a mesma quantidade, cada um subtrai e grava o resultado; uma gravação sobrescreve a outra e o decremento se perde. A aplicação confirma vendas que nunca saem da prateleira, **sem nenhum erro aparecer**.
+- **H2 — `com_condicao`:** `sobrevendas = 0` e `conflitos_detectados > 0`. A `ConditionExpression` sobre `versao` faz a escrita concorrente falhar explicitamente em vez de sobrescrever.
 
-- **H1 — `sem_condicao`:** `sobrevendas > 0`. Os decrementos são escritas completas de item; a resolução last-writer-wins faz uma sobrescrever a outra, e o estoque final fica **acima** do esperado. A aplicação confirmou vendas que nunca saíram da prateleira.
-- **H2 — `com_condicao_multi_regiao`:** `sobrevendas` continua `> 0`. A `ConditionExpression` é avaliada contra a **réplica local** da região que recebe a escrita, e não enxerga a escrita concorrente em curso na outra região.
-- **H3 — `com_condicao_regiao_unica`:** `sobrevendas = 0` e `conflitos_detectados > 0`. É o **grupo de controle**: mesma concorrência, mesma condição, uma região só — aqui a condição funciona.
-
-O achado é a diferença entre H2 e H3. Ela separa duas coisas que costumam ser confundidas: escrita condicional protege contra concorrência **dentro de uma região**, e não é mecanismo de coordenação **entre regiões**.
+O achado é o contraste entre perda **silenciosa** e erro **explícito**. Nos dois casos há conflito; a diferença é se a aplicação fica sabendo.
 
 ## Procedimento
 
 | Etapa | Ação |
 |---|---|
 | — | reset; `prod-042` com 100 unidades |
-| `modo_sem_condicao` | 50 vendas a partir de `sa-east-1` e 50 a partir de `eu-west-1`, simultâneas, sem condição |
-| `aguardando_convergencia` | consultar as duas regiões até concordarem; cronometrar |
-| — | reset; repetir com `ConditionExpression` sobre `versao` |
-| — | reset; repetir com condição e as 100 vendas partindo só de `sa-east-1` |
+| `modo_sem_condicao` | dois processos paralelos, 50 vendas cada, com leitura seguida de escrita sem condição |
+| — | medir `quantidade_final`; reset |
+| `modo_com_condicao` | mesma carga, com `ConditionExpression` sobre `versao`; contar `ConditionalCheckFailedException` |
+| — | medir `quantidade_final` |
 
-Cinco rodadas de cada modo, registrando vencedor e tempo de convergência por rodada, mais p50 e p95.
+Cinco rodadas de cada modo.
 
-A simultaneidade real importa: as vendas das duas regiões precisam partir ao mesmo tempo, em threads ou processos paralelos. Se uma fila esperar a outra, não há conflito para observar.
+A concorrência real importa: os dois processos precisam começar ao mesmo tempo, com um intervalo deliberado entre a leitura e a escrita para abrir a janela. Se um esperar o outro, não há conflito para observar.
 
 ## Critério de sucesso da execução
 
-Os três modos completam as cinco rodadas, as regiões convergem dentro do tempo limite e `quantidade_final` é lida depois da convergência — nunca durante.
+Os dois modos completam as cinco rodadas e `quantidade_final` é lida depois de todas as escritas terminarem.
 
 ## Se a hipótese for refutada
 
-Risco **R3** da matriz. Se `sobrevendas` der zero no modo `sem_condicao`, a causa mais provável é janela de concorrência curta demais: aumentar o paralelismo e reduzir o intervalo entre escritas. Se continuar zero com concorrência agressiva, **isso é o achado** — e vai para o relatório como medição do comportamento da replicação, não como experimento com defeito. O que não se faz é ajustar o experimento até ele produzir o número esperado.
+Risco **R3**. Se `sobrevendas` der zero no modo `sem_condicao`, a causa mais provável é janela de concorrência curta demais: aumentar o intervalo entre leitura e escrita e o paralelismo. Se continuar zero com concorrência agressiva, **isso é o achado** — e vai para o relatório como medição, não como experimento com defeito. O que não se faz é ajustar o experimento até ele produzir o número esperado.
 
 ## O que este cenário não mede
 
-O critério interno de desempate do DynamoDB. O campo `atualizado_em` é carimbo da aplicação; o serviço usa um timestamp próprio, que não é exposto. Observa-se quem venceu, não por quê.
+Resolução de conflito entre réplicas — last-writer-wins só aparece em replicação entre regiões, que esta conta não suporta.
 
 ---
 
@@ -168,10 +190,10 @@ Quando a própria aplicação corrompe os dados, é possível voltar atrás — 
 ## Hipóteses
 
 - **H1** — A restauração devolve o estado exato do instante pedido: `divergencias = 0`, `checksum_antes == checksum_depois`, `valor_antes == valor_restaurado`.
-- **H2** — A restauração cria uma **tabela nova** e leva ordem de minutos. Não existe restauração in-place; recuperar é uma operação deliberada, com downtime de decisão humana.
+- **H2** — A restauração cria uma **tabela nova** e leva ordem de minutos. Não existe restauração in-place.
 - **H3** — A corrupção é invisível para todos os mecanismos de §5.1 a §5.4. Nenhum alarme dispara, nenhuma réplica diverge, o scrub não acusa nada: as escritas foram confirmadas corretamente. Só backup e PITR cobrem este caso.
 
-H3 não se mede com número — demonstra-se pela ausência de qualquer sinal automático. É o argumento central da §5.5 e a razão de este cenário existir.
+H3 não se mede com número — demonstra-se pela ausência de qualquer sinal automático. É o argumento central da §5.5.
 
 ## Procedimento
 
@@ -179,20 +201,19 @@ H3 não se mede com número — demonstra-se pela ausência de qualquer sinal au
 |---|---|
 | — | reset; registrar `unidades_antes`, `valor_antes` e checksum dos 50 produtos |
 | — | aguardar alguns minutos para haver um instante de restauração seguro antes da corrupção |
-| `corrompendo_quantidade` | `BatchWriteItem` zerando `quantidade` de 40 produtos — simula bug de atualização em massa |
+| `corrompendo_quantidade` | `BatchWriteItem` zerando `quantidade` de 40 produtos |
 | — | registrar `unidades_apos_corrupcao` e `valor_apos_corrupcao` |
 | `restaurando_pitr` | `RestoreTableToPointInTime` para o instante anterior à corrupção, em tabela nova |
-| `comparando_itens` | comparar item a item a tabela restaurada com o estado registrado no início; contar divergências |
+| `comparando_itens` | comparar item a item com o estado registrado no início; contar divergências |
 
 ## Critério de sucesso da execução
 
-A tabela restaurada fica `ACTIVE`, a comparação roda sobre os 50 produtos e as métricas são gravadas. `divergencias > 0` é resultado válido e muito interessante — significaria que a janela de restauração não pegou o instante pretendido.
+A tabela restaurada fica `ACTIVE`, a comparação roda sobre os 50 produtos e as métricas são gravadas. `divergencias > 0` é resultado válido e interessante.
 
 ## Cuidados
 
-- A tabela restaurada **não está no Terraform**. Precisa ser apagada à mão, e entra no teardown (risco R9).
-- Verificar se a tabela restaurada vem como Global Table ou como tabela de região única — isso muda o que a comparação significa.
-- O paper afirma que os backups são consistentes entre partições **até o segundo mais próximo** (§5.5). Testar isso exigiria escrever durante o instante de corte; fica registrado como extensão opcional, não como parte do cenário.
+- A tabela restaurada **não está no Terraform**. Precisa ser apagada à mão e entra no teardown (risco R9).
+- O paper afirma que os backups são consistentes entre partições **até o segundo mais próximo** (§5.5). Testar isso exigiria escrever durante o instante de corte; fica como extensão opcional.
 
 ## O que este cenário não mede
 
@@ -200,12 +221,24 @@ A janela de 35 dias do PITR, citada no paper em 2022 e que deve ser conferida na
 
 ---
 
+# Cobertura e limitação
+
+| Promessa do paper | Cenário | Situação |
+|---|---|---|
+| Performance previsível (§4) | B | coberta |
+| Consistência e concorrência (§3) | C | coberta |
+| Durabilidade (§5.5) | D | coberta |
+| Atomicidade entre itens (§3) | A | coberta |
+| **Disponibilidade sob falha (§6.1)** | — | **não coberta** |
+
+A última linha é a limitação de ambiente, e precisa de um parágrafo próprio no relatório: a conta disponível não suporta recursos entre regiões, então não houve como remover uma réplica regional e medir o comportamento sob perda de região. A fundamentação teórica dessa promessa está em `docs/paper/secao-4-6-capacidade-disponibilidade.md`; o que falta é a medição.
+
+---
+
 # Extensão opcional
 
-Se a Semana 6 chegar com folga, dois candidatos, em ordem de custo:
+**Reconstrução pelo Streams.** Apagar itens e reconstruir o estoque a partir do log de alterações do DynamoDB Streams — o análogo externo do write-ahead log da §5.1.
 
-**Escrita parcial vs. transação** (meio dia). Uma transferência entre dois produtos que falha no meio, com e sem `TransactWriteItems`. Sem transação, o estado parcial fica visível; com, nada acontece. Instantâneo, determinístico e o melhor momento possível de apresentação.
+Com região única essa extensão ficou **mais atraente e menos arriscada** do que era: o risco de o stream carregar registros vindos da replicação entre regiões desapareceu junto com as Global Tables. Agora é só o log das escritas da aplicação.
 
-**Reconstrução pelo Streams** (dois dias). Apagar itens e reconstruir o estoque a partir do log de alterações do DynamoDB Streams — o análogo externo do write-ahead log da §5.1. Risco conhecido: o stream de uma Global Table carrega também os registros vindos da replicação, e reaplicá-los duplicaria os decrementos; filtrar por `regiao_escrita` (risco R13).
-
-Se nenhuma das duas couber, ambas rendem parágrafo de trabalhos futuros no relatório.
+Se a Semana 6 chegar com folga, é o melhor candidato a quinto cenário — e cobre parcialmente a §5.1, que hoje só aparece na fundamentação teórica.

@@ -1,7 +1,6 @@
-"""Popula a tabela global: 50 produtos com 100 unidades cada.
+"""Popula a tabela Estoque: 50 produtos com 100 unidades cada.
 
-Escreve na Região primária e espera a replicação chegar às outras Regiões.
-Ao final, cada Região deve somar 5.000 unidades. Na EstoqueThrottle entra
+Ao final, a tabela deve somar 5.000 unidades. Na EstoqueThrottle entra
 apenas o produto do Cenário B (prod-007): a 1 WCU, semear 50 itens seria lento.
 
 Uso: python scripts/02_seed_data.py [--espera 60]

@@ -7,7 +7,7 @@
 - Python 3.11 ou mais novo
 - Terraform 1.10 ou mais novo
 - AWS CLI v2 configurada (`aws configure`) com um usuário IAM do grupo, não o usuário raiz
-- Permissões: DynamoDB (tabelas, réplicas, backups), CloudWatch (leitura) e Budgets, nas três Regiões
+- Permissões: DynamoDB (tabelas, réplicas, backups), CloudWatch (leitura) e Budgets, em us-east-2
 
 ```bash
 python -m venv .venv
@@ -51,20 +51,19 @@ O que é criado:
 
 | Recurso | Configuração |
 |---|---|
-| Tabela global `Estoque` | `sa-east-1` (primária), réplicas em `us-east-1` e `eu-west-1`; modo MREC; sob demanda; PITR ligado |
-| Tabela `EstoqueThrottle` | só em `sa-east-1`; provisionada a 1 WCU / 1 RCU (Cenário B); o seed grava só o `prod-007` |
+| Tabela `Estoque` | `us-east-2` modo MREC; sob demanda; PITR ligado |
+| Tabela `EstoqueThrottle` | em `us-east-2`; provisionada a 1 WCU / 1 RCU (Cenário B); o seed grava só o `prod-007` |
 | Orçamento | alerta por e-mail em 50% e 100% do limite (só se `email_alerta_custo` for preenchido) |
 
-Criar as réplicas leva alguns minutos.
 
 ## 3. Verificar e popular
 
 ```bash
-python scripts/01_setup_table.py    # espera ACTIVE nas 3 Regiões, confere o PITR e a EstoqueThrottle
+python scripts/01_setup_table.py    # espera ACTIVE, confere o PITR e a EstoqueThrottle
 python scripts/02_seed_data.py      # 50 produtos × 100 unidades
 ```
 
-O esperado é 5.000 unidades em cada Região.
+O esperado é 5.000 unidades.
 
 ## 4. Voltar ao estado inicial entre execuções
 
@@ -79,11 +78,11 @@ cd terraform
 terraform destroy
 ```
 
-Depois, conferir no console das três Regiões se não sobrou tabela. Tabelas criadas por restauração (PITR) não estão no Terraform e precisam ser apagadas à mão.
+Depois, conferir no console de us-east-2 se não sobrou tabela. Tabelas criadas por restauração (PITR) não estão no Terraform e precisam ser apagadas à mão.
 
 ## 6. Custo
 
-- `Estoque` é sob demanda: paga por requisição, e cada escrita é cobrada também nas Regiões de réplica.
+- `Estoque` é sob demanda: paga por requisição.
 - `EstoqueThrottle` tem 1 WCU e 1 RCU provisionados.
 - O PITR é cobrado pelo tamanho da tabela, que aqui é de poucos kilobytes.
 - O maior risco de custo é **esquecer a infraestrutura ligada**. Rodar `terraform destroy` ao fim do dia, se não for usar no dia seguinte.

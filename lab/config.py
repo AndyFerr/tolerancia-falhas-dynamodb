@@ -16,7 +16,7 @@ UNIDADES_POR_PRODUTO = 100
 class Config:
     tabela: str = "Estoque"
     tabela_throttle: str = "EstoqueThrottle"
-    regioes: tuple = ("sa-east-1", "us-east-1", "eu-west-1")
+    regioes: tuple = ("us-east-2",)
 
     @property
     def primaria(self) -> str:
@@ -25,7 +25,7 @@ class Config:
 
 def carregar() -> Config:
     regioes = tuple(
-        r.strip() for r in os.environ.get("LAB_REGIOES", "sa-east-1,us-east-1,eu-west-1").split(",") if r.strip()
+        r.strip() for r in os.environ.get("LAB_REGIOES", "us-east-2").split(",") if r.strip()
     )
     if not regioes:
         raise ValueError("LAB_REGIOES está vazio")

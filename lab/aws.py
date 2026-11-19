@@ -55,14 +55,12 @@ def item_estoque(n: int, regiao: str, escritor: str, quantidade: int = config.UN
     }
 
 
-def resumo_regiao(regiao: str, nome: str) -> dict:
-    """Conta itens, soma unidades e valor (preco × quantidade) de uma Região.
-
-    Scan paginado: a tabela é pequena. O valor é o checksum de negócio do Cenário D.
-    """
+def resumo_regiao(regiao: str, nome: str, consistente: bool = False) -> dict:
     t = tabela(regiao, nome)
     itens, unidades, valor = 0, 0, Decimal(0)
     kwargs = {"ProjectionExpression": "quantidade, preco"}
+    if consistente:
+        kwargs["ConsistentRead"] = True
     while True:
         pagina = t.scan(**kwargs)
         for it in pagina.get("Items", []):
