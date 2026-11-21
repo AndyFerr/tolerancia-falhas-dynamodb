@@ -1,5 +1,6 @@
-# Tabela global Estoque (global tables versão 2019.11.21, modo MREC).
-# Sob demanda: a capacidade não interfere nos cenários de replicação.
+# Tabela Estoque: região única (us-east-2). A conta não suporta recursos entre
+# regiões, então não há Global Table. Sob demanda para não competir por
+# capacidade com o Cenário B.
 
 resource "aws_dynamodb_table" "estoque" {
   name         = var.tabela
@@ -22,7 +23,7 @@ resource "aws_dynamodb_table" "estoque" {
 }
 
 # Tabela separada para o Cenário B: 1 WCU provoca throttling de propósito,
-# sem afetar a replicação da tabela global.
+# sem afetar a tabela principal.
 resource "aws_dynamodb_table" "throttle" {
   name           = var.tabela_throttle
   billing_mode   = "PROVISIONED"
