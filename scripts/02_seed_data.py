@@ -5,9 +5,7 @@ apenas o produto do Cenário B (prod-007): a 1 WCU, semear 50 itens seria lento.
 
 Uso: python scripts/02_seed_data.py [--espera 60]
 """
-import argparse
 import sys
-import time
 
 import _caminho  # noqa: F401
 from lab import aws, config
@@ -29,34 +27,31 @@ def semear(cfg, escritor: str = "seed") -> None:
     )
 
 
-def conferir(cfg, espera_s: int) -> bool:
-    """Espera todas as Regiões mostrarem o total esperado. Imprime o que encontrou."""
-    limite = time.time() + espera_s
-    while True:
-        resumos = {r: aws.resumo_regiao(r, cfg.tabela) for r in cfg.regioes}
-        certo = all(
-            v["itens"] == ESPERADO_ITENS and v["unidades"] == ESPERADO_UNIDADES for v in resumos.values()
-        )
-        if certo or time.time() >= limite:
-            for r, v in resumos.items():
-                print(f"  {r:<12} itens={v['itens']:<3} unidades={v['unidades']}")
-            return certo
-        time.sleep(2)
+def conferir(cfg) -> bool:
+    """Confere o total da tabela com leitura fortemente consistente."""
+    r = aws.resumo_regiao(cfg.primaria, cfg.tabela, consistente=True)
+    print(f"  {cfg.tabela:<16} itens={r['itens']:<3} unidades={r['unidades']}")
+    return r["itens"] == ESPERADO_ITENS and r["unidades"] == ESPERADO_UNIDADES  
+
+def conferir_produto_throttle(cfg) -> bool:
+    """O Cenário B precisa do produto na tabela de throttling."""
+    t = aws.tabela(cfg.primaria, cfg.tabela_throttle)
+    pid = config.id_produto(PRODUTO_THROTTLE)
+    achou = "Item" in t.get_item(Key={"produto_id": pid}, ConsistentRead=True)
+    print(f"  {cfg.tabela_throttle:<16} {pid}: {'ok' if achou else 'AUSENTE'}")
+    return achou
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--espera", type=int, default=60, help="segundos máximos esperando a replicação")
-    args = p.parse_args()
     cfg = config.carregar()
 
     print(f"Escrevendo {ESPERADO_ITENS} produtos em {cfg.primaria} ...")
     semear(cfg)
-    print("Conferindo as Regiões ...")
-    if conferir(cfg, args.espera):
-        print(f"OK: {ESPERADO_UNIDADES} unidades em cada Região.")
+    print("Conferindo os dados ...")
+    if conferir(cfg) and conferir_produto_throttle(cfg):
+        print(f"OK: {ESPERADO_UNIDADES} unidades em {cfg.tabela}; produto do Cenário B semeado.")
         return 0
-    print("ERRO: as Regiões não convergiram para o total esperado no tempo dado.")
+    print("ERRO: os dados não bateram com o esperado.")
     return 1
 
 

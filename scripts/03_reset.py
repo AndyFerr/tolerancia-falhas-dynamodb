@@ -5,7 +5,6 @@ que não seja um dos 50 produtos (sobras de cenários).
 
 Uso: python scripts/03_reset.py [--espera 60]
 """
-import argparse
 import importlib
 import sys
 
@@ -32,19 +31,16 @@ def apagar_sobras(cfg) -> int:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--espera", type=int, default=60, help="segundos máximos esperando a replicação")
-    args = p.parse_args()
     cfg = config.carregar()
 
     print(f"Apagando sobras em {cfg.primaria} ...")
     print(f"  {apagar_sobras(cfg)} item(ns) removido(s)")
     print("Regravando os produtos ...")
     seed.semear(cfg, escritor="reset")
-    if seed.conferir(cfg, args.espera):
-        print("OK: estado inicial restaurado nas Regiões.")
+    if seed.conferir(cfg) and seed.conferir_produto_throttle(cfg):
+        print("OK: estado inicial restaurado.")
         return 0
-    print("ERRO: as Regiões não convergiram no tempo dado.")
+    print("ERRO: o estado restaurado não bateu com o esperado.")
     return 1
 
 
