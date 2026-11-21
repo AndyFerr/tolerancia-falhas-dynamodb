@@ -1,6 +1,5 @@
 # Runbook da infraestrutura
 
-> Status: **escrito, ainda não executado contra a AWS**. Quem rodar pela primeira vez corrige o que não bater (tarefa B7: validação por outro integrante).
 
 ## 0. Pré-requisitos
 
