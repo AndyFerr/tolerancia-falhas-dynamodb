@@ -124,10 +124,10 @@ Cenários do laboratório (detalhes de parâmetros e métricas em [`docs/CONTRAT
 |---|---|---|---|
 | **A** — atomicidade | transferência de unidades entre dois produtos cuja segunda escrita falha, com e sem TransactWriteItems | unidades perdidas na transferência | §3 |
 | **B** — throttling | 100 vendas no mesmo produto em tabela de 1 WCU, sem retry e depois com backoff exponencial | vendas perdidas e tentativas por fase | §4 |
-| **C** — conflito | duas regiões vendendo o mesmo produto ao mesmo tempo, com e sem escrita condicional | sobrevendas e tempo de convergência | §3 |
+| **C** — conflito | dois processos vendendo o mesmo produto ao mesmo tempo, com e sem escrita condicional | sobrevendas e conflitos detectados | §3 |
 | **D** — recuperação | zera a quantidade de 40 produtos e restaura por PITR em tabela nova | divergências e valor de estoque antes e depois | §5.5 |
 
-> [!LIMITAÇÃO DE AMBIENTE] A conta da AWS disponível não suporta recursos entre regiões, o que inviabilizou Global Tables. A promessa de disponibilidade sob falha de região (§6.1) é tratada apenas na fundamentaçãpo teórica, sem medição. Ver [`docs/RISCOS.md`](docs/RISCOS.md))
+> [!LIMITAÇÃO DE AMBIENTE] A conta da AWS disponível não suporta recursos entre regiões, o que inviabilizou Global Tables. A promessa de disponibilidade sob falha de região (§6.1) é tratada apenas na fundamentação teórica, sem medição. Ver [`docs/RISCOS.md`](docs/RISCOS.md)
 ---
 
 ## 6. Infraestrutura
@@ -135,9 +135,12 @@ Cenários do laboratório (detalhes de parâmetros e métricas em [`docs/CONTRAT
 A infraestrutura é descrita em Terraform e verificada por scripts Python:
 
 ```text
-terraform/   tabela global Estoque em us-east-2 (PITR, streams) e tabela EstoqueThrottle (1 WCU)
-scripts/     01_setup_table.py (verifica), 02_seed_data.py (50 produtos × 100 unidades), 03_reset.py
-lab/         código comum: configuração e acesso ao DynamoDB
+terraform/   tabela Estoque em us-east-2 (PITR, streams) e tabela EstoqueThrottle (1 WCU)
+scripts/     01_setup_table.py (verifica), 02_seed_data.py (50 produtos × 100 unidades), 03_reset.py,
+             04_verificar_recursos.py (PITR, transações e escrita condicional)
+scenarios/   um script por cenário: cenario_a.py … cenario_d.py
+lab/         código comum: configuração, acesso ao DynamoDB e envelope de resultado (execucao.py)
+results/     um JSON por execução de cenário — a evidência do trabalho
 ```
 
 Cada item gravado leva `versao`, `atualizado_em` e `regiao_escrita`, para que os logs dos experimentos identifiquem Região, versão e momento de cada escrita.
@@ -150,10 +153,11 @@ O passo a passo (criar, popular, resetar, destruir e controlar custo) está em [
 
 - [x] Estudo dirigido da §3 (Arquitetura) e da §5 (Durabilidade e corretude)
 - [x] Mapa conceito → cenário de falha
-- [x] Terraform e scripts de setup, seed e reset (escritos; falta aplicar na AWS)
-- [ ] Conta AWS do grupo com credenciais em us-east-2 e alerta de custo
-- [ ] Infraestrutura aplicada e seed validado em us-east-2
-- [ ] Implementação dos cenários de falha
+- [x] Terraform e scripts de setup, seed e reset
+- [x] Conta AWS do grupo (região única, us-east-2)
+- [x] Infraestrutura aplicada e seed validado em us-east-2
+- [x] Cenários A, B, C e D implementados
+- [ ] Execução dos cenários na AWS e `results/` versionado
 - [ ] Backend e dashboard
 - [ ] Coleta e análise dos resultados
 - [ ] Relatório final, vídeo e apresentação
