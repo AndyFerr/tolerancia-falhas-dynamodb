@@ -1,0 +1,42 @@
+=== execução 1 ===
+Apagando sobras em us-east-2 ...
+  0 item(ns) removido(s)
+Regravando os produtos ...
+  Estoque          itens=50  unidades=5000
+  EstoqueThrottle  prod-007: ok
+OK: estado inicial restaurado.
+[a-2026-11-24T224822Z] etapa: preparando_destino
+[a-2026-11-24T224822Z] etapa: modo_sem_transacao (0/5)
+  sem_transacao: {'transferencias_tentadas': 5, 'transferencias_concluidas': 0, 'unidades_totais_antes': 5005, 'unidades_totais_depois': 4955, 'unidades_perdidas': 50, 'estado_parcial': True}
+[a-2026-11-24T224822Z] etapa: preparando_destino
+[a-2026-11-24T224822Z] etapa: modo_com_transacao (0/5)
+  com_transacao: {'transferencias_tentadas': 5, 'transferencias_concluidas': 0, 'unidades_totais_antes': 5005, 'unidades_totais_depois': 5005, 'unidades_perdidas': 0, 'estado_parcial': False}
+[a-2026-11-24T224822Z] concluido -> results/cenario_a_2026-11-24T224822Z.json
+=== execução 2 ===
+Apagando sobras em us-east-2 ...
+  0 item(ns) removido(s)
+Regravando os produtos ...
+  Estoque          itens=50  unidades=5000
+  EstoqueThrottle  prod-007: ok
+OK: estado inicial restaurado.
+[a-2026-11-24T224834Z] etapa: preparando_destino
+[a-2026-11-24T224834Z] etapa: modo_sem_transacao (0/5)
+  sem_transacao: {'transferencias_tentadas': 5, 'transferencias_concluidas': 0, 'unidades_totais_antes': 5005, 'unidades_totais_depois': 4955, 'unidades_perdidas': 50, 'estado_parcial': True}
+[a-2026-11-24T224834Z] etapa: preparando_destino
+[a-2026-11-24T224834Z] etapa: modo_com_transacao (0/5)
+  com_transacao: {'transferencias_tentadas': 5, 'transferencias_concluidas': 0, 'unidades_totais_antes': 5005, 'unidades_totais_depois': 5005, 'unidades_perdidas': 0, 'estado_parcial': False}
+[a-2026-11-24T224834Z] concluido -> results/cenario_a_2026-11-24T224834Z.json
+=== execução 3 ===
+Apagando sobras em us-east-2 ...
+  0 item(ns) removido(s)
+Regravando os produtos ...
+  Estoque          itens=50  unidades=5000
+  EstoqueThrottle  prod-007: ok
+OK: estado inicial restaurado.
+[a-2026-11-24T224845Z] etapa: preparando_destino
+[a-2026-11-24T224845Z] etapa: modo_sem_transacao (0/5)
+  sem_transacao: {'transferencias_tentadas': 5, 'transferencias_concluidas': 0, 'unidades_totais_antes': 5005, 'unidades_totais_depois': 4955, 'unidades_perdidas': 50, 'estado_parcial': True}
+[a-2026-11-24T224845Z] etapa: preparando_destino
+[a-2026-11-24T224845Z] etapa: modo_com_transacao (0/5)
+  com_transacao: {'transferencias_tentadas': 5, 'transferencias_concluidas': 0, 'unidades_totais_antes': 5005, 'unidades_totais_depois': 5005, 'unidades_perdidas': 0, 'estado_parcial': False}
+[a-2026-11-24T224845Z] concluido -> results/cenario_a_2026-11-24T224845Z.json
