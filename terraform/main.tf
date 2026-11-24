@@ -12,7 +12,7 @@ resource "aws_dynamodb_table" "estoque" {
     type = "S"
   }
 
-  # Global tables exigem streams com imagem nova e antiga.
+  # Streams: base da extensão opcional (reconstrução a partir do log).
   stream_enabled   = true
   stream_view_type = "NEW_AND_OLD_IMAGES"
 

@@ -1,0 +1,31 @@
+{
+  "schema_version": "4.0",
+  "cenario": "D",
+  "execucao_id": "d-2026-11-24T060148Z",
+  "inicio": "2026-11-24T06:01:48.499Z",
+  "fim": "2026-11-24T06:10:48.260Z",
+  "duracao_s": 539.8,
+  "status": "concluido",
+  "parametros": {
+    "tabela": "Estoque",
+    "tipo_corrupcao": "quantidade_zerada_em_massa",
+    "produtos_afetados": 40,
+    "instante_restauracao": "2026-11-24T06:01:52.000Z",
+    "tabela_restaurada": "Estoque_restore_20261124T060152"
+  },
+  "metricas": {
+    "produtos_antes": 50,
+    "unidades_antes": 5000,
+    "unidades_apos_corrupcao": 1000,
+    "valor_antes": 317000,
+    "valor_apos_corrupcao": 47400,
+    "produtos_restaurados": 50,
+    "unidades_restauradas": 5000,
+    "valor_restaurado": 317000,
+    "divergencias": 0,
+    "checksum_antes": "b96eca48",
+    "checksum_depois": "b96eca48",
+    "duracao_restauracao_s": 228
+  },
+  "erro": null
+}

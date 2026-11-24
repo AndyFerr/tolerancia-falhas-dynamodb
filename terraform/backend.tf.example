@@ -4,7 +4,7 @@ terraform {
   backend "s3" {
     bucket       = "TROQUE-pelo-bucket-do-grupo"
     key          = "tolerancia-falhas-dynamodb/terraform.tfstate"
-    region       = "sa-east-1"
+    region       = "us-east-2"
     use_lockfile = true
   }
 }

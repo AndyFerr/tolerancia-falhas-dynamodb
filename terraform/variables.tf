@@ -1,11 +1,11 @@
 variable "regiao_primaria" {
   description = "Região única do projeto. A conta não suporta recursos entre regiões."
   type        = string
-  default     = "us-east-1"
+  default     = "us-east-2"
 }
 
 variable "tabela" {
-  description = "Nome da tabela global."
+  description = "Nome da tabela principal."
   type        = string
   default     = "Estoque"
 }

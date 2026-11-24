@@ -1,0 +1,105 @@
+{
+  "schema_version": "4.0",
+  "cenario": "B",
+  "execucao_id": "b-2026-11-23T222821Z",
+  "inicio": "2026-11-23T22:28:21.490Z",
+  "fim": "2026-11-23T22:29:01.595Z",
+  "duracao_s": 40.1,
+  "status": "concluido",
+  "parametros": {
+    "tabela": "EstoqueThrottle",
+    "produto_id": "prod-007",
+    "write_capacity_units": 1,
+    "n_vendas": 100
+  },
+  "metricas": {
+    "fase_sem_retry": {
+      "vendas_concluidas": 56,
+      "vendas_perdidas": 44,
+      "throttled": 44,
+      "tentativas_totais": 100,
+      "duracao_ms": 12712
+    },
+    "fase_com_backoff": {
+      "vendas_concluidas": 100,
+      "vendas_perdidas": 0,
+      "throttled": 0,
+      "tentativas_totais": 127,
+      "duracao_ms": 20146
+    },
+    "throttle_por_janela": [
+      {
+        "janela_s": 1,
+        "tentativas": 8,
+        "throttled": 4
+      },
+      {
+        "janela_s": 2,
+        "tentativas": 8,
+        "throttled": 0
+      },
+      {
+        "janela_s": 3,
+        "tentativas": 8,
+        "throttled": 1
+      },
+      {
+        "janela_s": 4,
+        "tentativas": 8,
+        "throttled": 8
+      },
+      {
+        "janela_s": 5,
+        "tentativas": 8,
+        "throttled": 8
+      },
+      {
+        "janela_s": 6,
+        "tentativas": 8,
+        "throttled": 1
+      },
+      {
+        "janela_s": 7,
+        "tentativas": 8,
+        "throttled": 0
+      },
+      {
+        "janela_s": 8,
+        "tentativas": 7,
+        "throttled": 3
+      },
+      {
+        "janela_s": 9,
+        "tentativas": 8,
+        "throttled": 8
+      },
+      {
+        "janela_s": 10,
+        "tentativas": 8,
+        "throttled": 0
+      },
+      {
+        "janela_s": 11,
+        "tentativas": 8,
+        "throttled": 0
+      },
+      {
+        "janela_s": 12,
+        "tentativas": 8,
+        "throttled": 6
+      },
+      {
+        "janela_s": 13,
+        "tentativas": 5,
+        "throttled": 5
+      }
+    ],
+    "aquecimento": {
+      "escritas": 38,
+      "aceitas_pelo_burst": 28,
+      "duracao_ms": 5102,
+      "throttling_continuo": true
+    }
+  },
+  "erro": null
+}
