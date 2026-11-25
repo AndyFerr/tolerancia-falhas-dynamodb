@@ -127,7 +127,20 @@ Cenários do laboratório (detalhes de parâmetros e métricas em [`docs/CONTRAT
 | **C** — conflito | dois processos vendendo o mesmo produto ao mesmo tempo, com e sem escrita condicional | sobrevendas e conflitos detectados | §3 |
 | **D** — recuperação | zera a quantidade de 40 produtos e restaura por PITR em tabela nova | divergências e valor de estoque antes e depois | §5.5 |
 
-> [!LIMITAÇÃO DE AMBIENTE] A conta da AWS disponível não suporta recursos entre regiões, o que inviabilizou Global Tables. A promessa de disponibilidade sob falha de região (§6.1) é tratada apenas na fundamentação teórica, sem medição. Ver [`docs/RISCOS.md`](docs/RISCOS.md)
+> [!NOTE]
+> **Limitação de ambiente.** A conta da AWS disponível não suporta recursos entre regiões, o que inviabilizou Global Tables. A promessa de disponibilidade sob falha de região (§6.1) é tratada apenas na fundamentação teórica, sem medição. Ver [`docs/RISCOS.md`](docs/RISCOS.md).
+
+### Resultados medidos
+
+Todas as execuções em `us-east-2`, com os arquivos em [`results/`](results/). Hipóteses, interpretação e limites de cada cenário estão em [`docs/cenarios/`](docs/cenarios/).
+
+| Cenário | Execuções | Sem o mecanismo | Com o mecanismo |
+|---|---|---|---|
+| [**A**](docs/cenarios/A.md) — transação | 6 | 50 unidades perdidas e estado parcial, em todas | 0 unidades perdidas |
+| [**B**](docs/cenarios/B.md) — backoff | 3 | 42, 44 e 44 vendas perdidas de 100 | 0 vendas perdidas (~25 tentativas a mais) |
+| [**C**](docs/cenarios/C.md) — escrita condicional | 2 | 248 e 249 sobrevendas em 5 rodadas, sem nenhum erro | 0 sobrevendas, 250 conflitos detectados |
+| [**D**](docs/cenarios/D.md) — PITR | 2 | 5.000 → 1.000 unidades após a corrupção | 5.000 restauradas, 0 divergências, 228 s |
+
 ---
 
 ## 6. Infraestrutura
@@ -141,11 +154,22 @@ scripts/     01_setup_table.py (verifica), 02_seed_data.py (50 produtos × 100 u
 scenarios/   um script por cenário: cenario_a.py … cenario_d.py
 lab/         código comum: configuração, acesso ao DynamoDB e envelope de resultado (execucao.py)
 results/     um JSON por execução de cenário — a evidência do trabalho
+scripts/server.py   API em Flask (docs/CONTRATOS.md, seção 3) que serve o dashboard
+dashboard/          painel web: estado das tabelas, disparo dos cenários e replay dos resultados
 ```
 
 Cada item gravado leva `versao`, `atualizado_em` e `regiao_escrita`, para que os logs dos experimentos identifiquem Região, versão e momento de cada escrita.
 
 O passo a passo (criar, popular, resetar, destruir e controlar custo) está em [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+### Dashboard
+
+```bash
+pip install -r requirements.txt
+python scripts/server.py         # abre em http://localhost:8080
+```
+
+O painel mostra o estado das tabelas, dispara os cenários e reapresenta qualquer execução salva em `results/`. Disparar um cenário roda de verdade na AWS. Os resultados salvos continuam visíveis sem a infraestrutura, inclusive depois do `terraform destroy`: só os cards de estado das tabelas passam a mostrar `AUSENTE`.
 
 ---
 
@@ -157,10 +181,11 @@ O passo a passo (criar, popular, resetar, destruir e controlar custo) está em [
 - [x] Conta AWS do grupo (região única, us-east-2)
 - [x] Infraestrutura aplicada e seed validado em us-east-2
 - [x] Cenários A, B, C e D implementados
-- [ ] Execução dos cenários na AWS e `results/` versionado
-- [ ] Backend e dashboard
-- [ ] Coleta e análise dos resultados
-- [ ] Relatório final, vídeo e apresentação
+- [x] Execução dos cenários na AWS e `results/` versionado (A ×6, B ×3, C ×2, D ×2)
+- [x] Backend e dashboard
+- [x] Coleta e análise dos resultados ([`docs/cenarios/`](docs/cenarios/))
+- [ ] Slides, vídeo e apresentação
+- [ ] `terraform destroy` e conferência do console após a gravação
 
 ---
 

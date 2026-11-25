@@ -101,6 +101,16 @@ Depois do Cenário D:
 - rode `scripts/03_reset.py`, porque a tabela `Estoque` fica corrompida de propósito;
 - apague a tabela restaurada (o comando aparece no fim da execução). Ela **não** está no Terraform.
 
+## 4.2 Dashboard
+
+```bash
+python scripts/server.py          # http://localhost:8080
+```
+
+- Os botões de cenário rodam na AWS, como os scripts acima. Um cenário por vez: o servidor recusa outro enquanto um está rodando.
+- O botão de reset faz o mesmo que `scripts/03_reset.py`.
+- A lista de execuções lê `results/` e funciona sem a infraestrutura. Para gravar o vídeo depois do `terraform destroy`, use essa lista (replay).
+
 ## 5. Destruir tudo
 
 ```bash
