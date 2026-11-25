@@ -1,0 +1,38 @@
+{
+  "schema_version": "4.0",
+  "cenario": "A",
+  "execucao_id": "a-2026-11-25T002342Z",
+  "inicio": "2026-11-25T00:23:42.704Z",
+  "fim": "2026-11-25T00:23:50.991Z",
+  "duracao_s": 8.3,
+  "status": "concluido",
+  "parametros": {
+    "tabela": "Estoque",
+    "produto_origem": "prod-001",
+    "produto_destino": "prod-050",
+    "unidades_transferidas": 10,
+    "limite_prateleira": 100,
+    "rodadas": 5
+  },
+  "metricas": {
+    "modos": {
+      "sem_transacao": {
+        "transferencias_tentadas": 5,
+        "transferencias_concluidas": 0,
+        "unidades_totais_antes": 5005,
+        "unidades_totais_depois": 4955,
+        "unidades_perdidas": 50,
+        "estado_parcial": true
+      },
+      "com_transacao": {
+        "transferencias_tentadas": 5,
+        "transferencias_concluidas": 0,
+        "unidades_totais_antes": 5005,
+        "unidades_totais_depois": 5005,
+        "unidades_perdidas": 0,
+        "estado_parcial": false
+      }
+    }
+  },
+  "erro": null
+}

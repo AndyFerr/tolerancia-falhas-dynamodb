@@ -1,0 +1,111 @@
+{
+  "schema_version": "4.0",
+  "cenario": "C",
+  "execucao_id": "c-2026-11-25T002542Z",
+  "inicio": "2026-11-25T00:25:42.356Z",
+  "fim": "2026-11-25T00:28:10.455Z",
+  "duracao_s": 148.1,
+  "status": "concluido",
+  "parametros": {
+    "tabela": "Estoque",
+    "produto_id": "prod-042",
+    "quantidade_inicial": 100,
+    "processos": 2,
+    "vendas_por_processo": 50,
+    "rodadas": 5,
+    "janela_s": 0.02
+  },
+  "metricas": {
+    "modos": {
+      "sem_condicao": {
+        "vendas_confirmadas": 500,
+        "quantidade_esperada": 0,
+        "quantidade_final": 249,
+        "sobrevendas": 249,
+        "conflitos_detectados": 0,
+        "por_rodada": [
+          {
+            "vendas_confirmadas": 100,
+            "quantidade_esperada": 0,
+            "quantidade_final": 50,
+            "sobrevendas": 50,
+            "conflitos_detectados": 0
+          },
+          {
+            "vendas_confirmadas": 100,
+            "quantidade_esperada": 0,
+            "quantidade_final": 49,
+            "sobrevendas": 49,
+            "conflitos_detectados": 0
+          },
+          {
+            "vendas_confirmadas": 100,
+            "quantidade_esperada": 0,
+            "quantidade_final": 50,
+            "sobrevendas": 50,
+            "conflitos_detectados": 0
+          },
+          {
+            "vendas_confirmadas": 100,
+            "quantidade_esperada": 0,
+            "quantidade_final": 50,
+            "sobrevendas": 50,
+            "conflitos_detectados": 0
+          },
+          {
+            "vendas_confirmadas": 100,
+            "quantidade_esperada": 0,
+            "quantidade_final": 50,
+            "sobrevendas": 50,
+            "conflitos_detectados": 0
+          }
+        ]
+      },
+      "com_condicao": {
+        "vendas_confirmadas": 250,
+        "quantidade_esperada": 250,
+        "quantidade_final": 250,
+        "sobrevendas": 0,
+        "conflitos_detectados": 250,
+        "por_rodada": [
+          {
+            "vendas_confirmadas": 50,
+            "quantidade_esperada": 50,
+            "quantidade_final": 50,
+            "sobrevendas": 0,
+            "conflitos_detectados": 50
+          },
+          {
+            "vendas_confirmadas": 50,
+            "quantidade_esperada": 50,
+            "quantidade_final": 50,
+            "sobrevendas": 0,
+            "conflitos_detectados": 50
+          },
+          {
+            "vendas_confirmadas": 50,
+            "quantidade_esperada": 50,
+            "quantidade_final": 50,
+            "sobrevendas": 0,
+            "conflitos_detectados": 50
+          },
+          {
+            "vendas_confirmadas": 50,
+            "quantidade_esperada": 50,
+            "quantidade_final": 50,
+            "sobrevendas": 0,
+            "conflitos_detectados": 50
+          },
+          {
+            "vendas_confirmadas": 50,
+            "quantidade_esperada": 50,
+            "quantidade_final": 50,
+            "sobrevendas": 0,
+            "conflitos_detectados": 50
+          }
+        ]
+      }
+    }
+  },
+  "erro": null
+}
