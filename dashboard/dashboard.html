@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tolerância a falhas com DynamoDB</title>
+<style>
+  :root { --fundo:#f7f7f5; --cartao:#fff; --borda:#e2e2dd; --texto:#1f1f1e;
+          --fraco:#6b6b66; --ok:#0f6e56; --okbg:#e1f5ee; --mau:#a32d2d; --maubg:#fcebeb; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px; background:var(--fundo); color:var(--texto);
+         font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width:1000px; margin:0 auto; }
+  h1 { font-size:20px; font-weight:600; margin:0 0 2px; }
+  .sub { color:var(--fraco); font-size:13px; margin:0 0 20px; }
+  .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); }
+  .cartao { background:var(--cartao); border:1px solid var(--borda); border-radius:10px; padding:14px 16px; }
+  .rotulo { font-size:12px; color:var(--fraco); }
+  .numero { font-size:26px; font-weight:600; margin:4px 0 0; }
+  .pill { display:inline-block; font-size:11px; padding:2px 9px; border-radius:10px;
+          background:var(--okbg); color:var(--ok); margin-top:8px; }
+  .pill.ruim { background:var(--maubg); color:var(--mau); }
+  section { margin-top:26px; }
+  h2 { font-size:15px; font-weight:600; margin:0 0 10px; }
+  button { font:inherit; padding:9px 14px; border-radius:8px; cursor:pointer;
+           border:1px solid #cfcfc9; background:#fff; }
+  button:hover:not(:disabled) { background:#f0f0ec; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .botoes { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .barra { height:6px; background:#e8e8e3; border-radius:3px; overflow:hidden; margin-top:8px; }
+  .barra > div { height:100%; background:var(--ok); width:0; transition:width .3s; }
+  .mono { font-family:ui-monospace,Consolas,monospace; font-size:12px; color:var(--fraco); }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  td,th { padding:4px 0; text-align:left; }
+  td:last-child, th:last-child { text-align:right; font-variant-numeric:tabular-nums; }
+  td.forte { font-weight:600; font-size:17px; }
+  td.ruim { color:var(--mau); }
+  thead th { font-size:12px; color:var(--fraco); font-weight:400; border-bottom:1px solid var(--borda); }
+  .vazio { color:var(--fraco); font-size:14px; }
+  select { font:inherit; padding:7px 10px; border-radius:8px; border:1px solid #cfcfc9; max-width:420px; }
+  .janelas { display:flex; gap:3px; align-items:flex-end; height:60px; margin-top:8px; }
+  .janelas > div { flex:1; background:var(--maubg); border-radius:2px 2px 0 0; position:relative; }
+  .janelas > div > i { position:absolute; bottom:0; left:0; right:0; background:var(--mau); border-radius:2px 2px 0 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Tolerância a falhas com Amazon DynamoDB</h1>
+  <p class="sub" id="cabecalho">carregando…</p>
+
+  <div class="grid" id="tabelas"></div>
+
+  <section>
+    <h2>Cenários</h2>
+    <div class="botoes">
+      <button data-c="a">A · atomicidade</button>
+      <button data-c="b">B · throttling</button>
+      <button data-c="c">C · concorrência</button>
+      <button data-c="d">D · recuperação</button>
+      <button id="btn-reset" style="margin-left:auto">Resetar estoque</button>
+    </div>
+    <p class="sub" style="margin-top:8px">O cenário D leva cerca de dez minutos.</p>
+  </section>
+
+  <section id="sec-exec" hidden>
+    <h2>Execução</h2>
+    <div class="cartao">
+      <div class="mono" id="exec-id"></div>
+      <div id="exec-etapa" style="margin-top:4px"></div>
+      <div class="barra"><div id="exec-barra"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Resultado</h2>
+    <div id="resultado"><p class="vazio">Nenhuma execução carregada.</p></div>
+  </section>
+
+  <section>
+    <h2>Replay</h2>
+    <div class="botoes">
+      <select id="lista"></select>
+      <button id="btn-replay">Carregar</button>
+    </div>
+  </section>
+
+</div>
+<script>
+const DESTAQUE = ["unidades_perdidas","sobrevendas","vendas_perdidas","divergencias","estado_parcial"];
+const $ = s => document.querySelector(s);
+let rodando = null;
+
+const bonito = k => k.replace(/_/g," ");
+const num = v => typeof v === "number" ? v.toLocaleString("pt-BR") : String(v);
+
+async function pegar(url, opt) {
+  const r = await fetch(url, opt);
+  const c = await r.json();
+  if (!r.ok) throw new Error(c?.erro?.mensagem || r.statusText);
+  return c;
+}
+
+function cartaoTabela(t) {
+  const ok = t.estado === "ACTIVE";
+  return `<div class="cartao">
+    <div class="rotulo">${t.tabela}${t.rotulo ? " · " + t.rotulo : ""}</div>
+    <p class="numero">${num(t.unidades)} <span class="rotulo">unidades</span></p>
+    <div class="rotulo">${t.produtos} produto(s) · R$ ${t.valor.toLocaleString("pt-BR",{minimumFractionDigits:2})}</div>
+    <span class="pill ${ok?"":"ruim"}">${t.estado}</span></div>`;
+}
+
+async function atualizarStatus() {
+  try {
+    const s = await pegar("/status");
+    $("#cabecalho").textContent = `região ${s.regiao} · atualizado ${new Date(s.consultado_em).toLocaleTimeString("pt-BR")}`;
+    $("#tabelas").innerHTML = s.tabelas.map(cartaoTabela).join("");
+  } catch (e) { $("#cabecalho").textContent = "servidor indisponível: " + e.message; }
+}
+
+function escalares(obj) {
+  return Object.entries(obj).filter(([,v]) => v === null || typeof v !== "object")
+    .map(([k,v]) => {
+      const forte = DESTAQUE.includes(k);
+      const ruim = forte && (v === true || (typeof v === "number" && v > 0));
+      return `<tr><td>${bonito(k)}</td><td class="${forte?"forte":""} ${ruim?"ruim":""}">${num(v)}</td></tr>`;
+    }).join("");
+}
+
+function tabelaArray(nome, arr) {
+  const cols = Object.keys(arr[0]);
+  return `<div class="cartao"><div class="rotulo">${bonito(nome)}</div><table>
+    <thead><tr>${cols.map(c=>`<th>${bonito(c)}</th>`).join("")}</tr></thead>
+    <tbody>${arr.map(l=>`<tr>${cols.map(c=>`<td>${num(l[c])}</td>`).join("")}</tr>`).join("")}</tbody>
+  </table></div>`;
+}
+
+function grafJanelas(arr) {
+  const max = Math.max(...arr.map(j => j.tentativas), 1);
+  const barras = arr.map(j => {
+    const alt = 100 * j.tentativas / max, prop = 100 * j.throttled / (j.tentativas || 1);
+    return `<div style="height:${alt}%" title="janela ${j.janela_s}s: ${j.throttled}/${j.tentativas} throttled">
+              <i style="height:${prop}%"></i></div>`;
+  }).join("");
+  return `<div class="cartao"><div class="rotulo">throttle por janela de 1 s — a parte escura é recusada</div>
+          <div class="janelas">${barras}</div></div>`;
+}
+
+function blocos(m) {
+  const grupos = [], arrays = [];
+  const fonte = m.modos ? {...m, ...m.modos} : m;
+  for (const [k,v] of Object.entries(fonte)) {
+    if (k === "modos") continue;
+    if (Array.isArray(v) && v.length && typeof v[0] === "object") arrays.push([k,v]);
+    else if (v && typeof v === "object") grupos.push([k,v]);
+  }
+  let html = grupos.map(([n,v]) =>
+    `<div class="cartao"><div class="rotulo">${bonito(n)}</div><table>${escalares(v)}</table></div>`
+  ).join("");
+  const soltos = escalares(m);
+  if (soltos) html += `<div class="cartao"><div class="rotulo">geral</div><table>${soltos}</table></div>`;
+  let extra = "";
+  for (const [n,v] of arrays) extra += n === "throttle_por_janela" ? grafJanelas(v) : tabelaArray(n,v);
+  for (const [n,v] of grupos) {
+    for (const [k,x] of Object.entries(v)) {
+      if (Array.isArray(x) && x.length && typeof x[0] === "object") extra += tabelaArray(`${n} · ${k}`, x);
+    }
+  }
+  return `<div class="grid">${html}</div>` + (extra ? `<div style="margin-top:12px">${extra}</div>` : "");
+}
+
+function mostrar(env) {
+  const err = env.erro ? `<p class="vazio" style="color:var(--mau)">${env.erro.codigo}: ${env.erro.mensagem}</p>` : "";
+  $("#resultado").innerHTML =
+    `<p class="mono">${env.execucao_id} · cenário ${env.cenario} · ${env.status} · ${env.duracao_s ?? "?"} s</p>${err}
+     <div class="cartao" style="margin-bottom:12px"><div class="rotulo">parâmetros</div>
+       <table>${escalares(env.parametros || {})}</table></div>
+     ${blocos(env.metricas || {})}`;
+}
+
+async function acompanhar(id) {
+  $("#sec-exec").hidden = false;
+  $("#exec-id").textContent = id;
+  while (true) {
+    let e;
+    try { e = await pegar("/execucao/" + id); }
+    catch { await new Promise(r => setTimeout(r, 2000)); continue; }
+    if (e.status !== "em_andamento") {
+      $("#sec-exec").hidden = true;
+      mostrar(e); rodando = null; botoes(true);
+      atualizarStatus(); carregarLista();
+      return;
+    }
+    $("#exec-etapa").textContent = bonito(e.etapa || "");
+    const p = e.progresso;
+    $("#exec-barra").style.width = p && p.total ? (100 * p.atual / p.total) + "%" : "0%";
+    await new Promise(r => setTimeout(r, 1000));
+  }
+}
+
+function botoes(ativo) {
+  document.querySelectorAll("button[data-c], #btn-reset").forEach(b => b.disabled = !ativo);
+}
+
+document.querySelectorAll("button[data-c]").forEach(b => b.onclick = async () => {
+  botoes(false);
+  try {
+    const r = await pegar("/cenario/" + b.dataset.c, { method:"POST" });
+    rodando = r.execucao_id;
+    acompanhar(r.execucao_id);
+  } catch (e) { alert(e.message); botoes(true); }
+});
+
+$("#btn-reset").onclick = async () => {
+  botoes(false);
+  try {
+    const r = await pegar("/reset", { method:"POST" });
+    alert(`Estoque resetado: ${r.produtos_resetados} produtos, ${r.unidades} unidades, ${r.sobras_removidas} sobra(s) removida(s).`);
+    atualizarStatus();
+  } catch (e) { alert(e.message); }
+  botoes(true);
+};
+
+async function carregarLista() {
+  try {
+    const r = await pegar("/resultados");
+    $("#lista").innerHTML = r.execucoes.map(e =>
+      `<option value="${e.execucao_id}">${e.cenario} · ${e.execucao_id} · ${e.status}</option>`).join("");
+  } catch {}
+}
+
+$("#btn-replay").onclick = async () => {
+  const id = $("#lista").value;
+  if (id) mostrar(await pegar("/execucao/" + id));
+};
+
+atualizarStatus(); carregarLista();
+setInterval(() => { if (!rodando) atualizarStatus(); }, 10000);
+</script>
+</body>
+</html>
