@@ -50,7 +50,14 @@ Uma venda recusada pela condição **não é repetida**: ela conta como conflito
 
 ## Resultados medidos
 
-Execução `c-2026-11-23T222012Z`, 149,2 s.
+Duas execuções, em dias diferentes.
+
+| Execução | Duração | `sem_condicao` — sobrevendas | `com_condicao` — sobrevendas | `com_condicao` — conflitos |
+|---|---|---|---|---|
+| `c-2026-11-23T222012Z` | 149,2 s | **248** | **0** | 250 |
+| `c-2026-11-25T002542Z` | 148,1 s | **249** | **0** | 250 |
+
+Detalhe da primeira execução:
 
 | Métrica (soma de 5 rodadas) | `sem_condicao` | `com_condicao` |
 |---|---|---|
@@ -60,15 +67,15 @@ Execução `c-2026-11-23T222012Z`, 149,2 s.
 | **sobrevendas** | **248** | **0** |
 | conflitos detectados | 0 | 250 |
 
-Por rodada, `sem_condicao`: sobrevendas de 50, 50, 49, 50, 49 — estoque final de 50, 50, 49, 50, 49 quando o esperado era zero.
+Por rodada, `sem_condicao`: sobrevendas de 50, 50, 49, 50, 49 na primeira execução e 50, 49, 50, 50, 50 na segunda. O estoque final de cada rodada é o mesmo número, quando o esperado era zero.
 
-Por rodada, `com_condicao`: 50 vendas confirmadas, 50 conflitos, estoque final exatamente 50, sobrevendas zero. Nas cinco rodadas, sem variação.
+Por rodada, `com_condicao`: 50 vendas confirmadas, 50 conflitos, estoque final exatamente 50, sobrevendas zero. Nas dez rodadas das duas execuções, sem variação.
 
 ## Interpretação
 
 **H1 e H2 confirmadas, com margem larga.**
 
-Sem condição, **metade das vendas confirmadas nunca existiu**. A aplicação disse "vendido" 500 vezes; 252 unidades saíram da prateleira. Em um sistema real, são 248 clientes esperando um produto que não há.
+Sem condição, **metade das vendas confirmadas nunca existiu**. Na primeira execução, a aplicação disse "vendido" 500 vezes; 252 unidades saíram da prateleira. A segunda repetiu o padrão, com 249 sobrevendas. Em um sistema real, são 248 clientes esperando um produto que não há.
 
 O número ser tão próximo de exatamente metade não é coincidência: com dois processos alternando dentro de uma janela de 20 ms, quase toda venda de um colide com a venda do outro, e cada colisão descarta um decremento. O par vira um.
 

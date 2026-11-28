@@ -52,10 +52,15 @@ A `ConditionalCheckFailedException` e a `TransactionCanceledException` são o **
 | Execução | Duração | `sem_transacao` — unidades perdidas | `com_transacao` — unidades perdidas |
 |---|---|---|---|
 | `a-2026-11-23T221646Z` | 8,7 s | **50** | **0** |
+| `a-2026-11-24T224822Z` | 9,3 s | **50** | **0** |
+| `a-2026-11-24T224834Z` | 8,7 s | **50** | **0** |
+| `a-2026-11-24T224845Z` | 8,7 s | **50** | **0** |
+| `a-2026-11-25T002342Z` | 8,3 s | **50** | **0** |
+| `a-2026-11-25T002521Z` | 8,2 s | **50** | **0** |
 
-> Preencher com as execuções seguintes. O comando consolidador está no fim deste documento.
+Seis execuções, resultado idêntico em todas: `estado_parcial = true` sem transação e `false` com transação, sempre a partir de 5005 unidades. As execuções de 24/11 estão registradas em `evidencias/A/execucoes.log`. A tabela acima sai do comando consolidador no fim deste documento.
 
-Detalhe da primeira execução:
+Detalhe da primeira execução (as demais têm os mesmos valores):
 
 | Métrica | `sem_transacao` | `com_transacao` |
 |---|---|---|

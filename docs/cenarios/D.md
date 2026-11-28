@@ -56,7 +56,14 @@ Além dele, o cenário calcula o **valor total do estoque** (soma de preço × q
 
 ## Resultados medidos
 
-Execução `d-2026-11-24T060148Z`, 539,8 s no total.
+Duas execuções, em dias diferentes, cada uma restaurando para uma tabela própria.
+
+| Execução | Duração total | Tabela restaurada | Divergências | Restauração |
+|---|---|---|---|---|
+| `d-2026-11-24T060148Z` | 539,8 s | `Estoque_restore_20261124T060152` | **0** | 228 s |
+| `d-2026-11-25T021059Z` | 539,5 s | `Estoque_restore_20261125T021103` | **0** | 228 s |
+
+As duas execuções produziram exatamente as mesmas métricas, inclusive o checksum e a duração da restauração:
 
 | Métrica | Valor |
 |---|---|

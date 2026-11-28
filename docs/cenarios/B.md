@@ -46,14 +46,15 @@ A taxa de throttle é registrada **por janela de um segundo** (`throttle_por_jan
 
 ## Resultados medidos
 
-Duas execuções, com dois minutos entre elas.
+Três execuções: as duas primeiras com dois minutos entre elas, a terceira no dia seguinte.
 
 | Execução | `sem_retry` concluídas | `com_backoff` concluídas | tentativas no backoff | duração sem retry | duração com backoff |
 |---|---|---|---|---|---|
 | `b-2026-11-23T222419Z` | **58/100** | **100/100** | 125 | 12,7 s | 19,6 s |
 | `b-2026-11-23T222821Z` | **56/100** | **100/100** | 127 | 12,7 s | 20,1 s |
+| `b-2026-11-25T002408Z` | **56/100** | **100/100** | 127 | 12,6 s | 20,1 s |
 
-Aquecimento, nas duas execuções: 38 escritas, 28 aceitas pelo burst, ~5 s, throttling contínuo alcançado.
+Aquecimento: 38 escritas e 28 aceitas pelo burst nas duas primeiras, 40 e 30 na terceira. Em todas levou ~5 s e alcançou throttling contínuo.
 
 Throttles por janela de 1 s, primeira execução:
 
@@ -64,9 +65,11 @@ throttle: 0  0  4  8  6  0  0  6  6  0  0  8  4
 
 Segunda execução: `4, 0, 1, 8, 8, 1, 0, 3, 8, 0, 0, 6, 5`.
 
+Terceira execução: `0, 0, 4, 8, 8, 0, 0, 6, 7, 0, 0, 7, 4`.
+
 ## Interpretação
 
-**H2 confirmada sem ressalvas.** Nas duas execuções o backoff levou a taxa de sucesso de ~57% para 100%, com cerca de 25 tentativas extras e um acréscimo de ~7 segundos. É a troca central do cenário: **o cliente compra sucesso com latência**. O banco não mudou entre as duas fases.
+**H2 confirmada sem ressalvas.** Nas três execuções o backoff levou a taxa de sucesso de ~57% para 100%, com cerca de 25 tentativas extras e um acréscimo de ~7 segundos. É a troca central do cenário: **o cliente compra sucesso com latência**. O banco não mudou entre as duas fases.
 
 **H3 confirmada, e é o resultado mais forte.** A série por janela não decresce — ela **oscila**. Janelas inteiras sem nenhum throttle alternam com janelas em que 8 de 8 tentativas são recusadas. Esse padrão é compatível com o enchimento e esvaziamento de um token bucket, e é incompatível com a hipótese de que o serviço estaria dividindo a partição para absorver a carga. É exatamente o que a §4.4 prevê para item único: o DynamoDB detecta o padrão e **evita** dividir, porque dividir não resolveria.
 
